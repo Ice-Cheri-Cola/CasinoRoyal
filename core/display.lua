@@ -45,7 +45,7 @@ function display.clear()
     if monitor then
 
         monitor.setBackgroundColor(
-            colors.black
+            theme.get().background
         )
 
         monitor.setTextColor(
@@ -131,7 +131,7 @@ function display.title(text)
     display.center(
         2,
         "♛ " .. text .. " ♛",
-        colors.yellow
+        theme.get().primary
     )
 
 
@@ -150,7 +150,7 @@ function display.border()
 
 
     monitor.setTextColor(
-        colors.gold
+       theme.get().secondary
     )
 
 
