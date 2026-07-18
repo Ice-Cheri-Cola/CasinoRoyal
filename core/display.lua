@@ -7,6 +7,8 @@
 
 local display = {}
 
+local theme =  require("core.theme")
+
 local monitor = nil
 
 
