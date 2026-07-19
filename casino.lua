@@ -1,6 +1,6 @@
 --================================================--
 -- Casino Royal
--- Version: 2.1.0
+-- Version: 4.0.0
 -- File: casino.lua
 -- Description: Player login and application controller
 --================================================--
@@ -23,15 +23,31 @@ local player =
 local bank =
     require("core.bank")
 
+local machine =
+    require("core.machine")
+
+local protocol =
+    require("core.protocol")
+
 --------------------------------------------------
 -- Settings
 --------------------------------------------------
 
-local monitorSide = "top"
-local checkDelay = 0.5
+local monitorSide =
+    "top"
 
-local casinoOpen = false
-local lastStatus = nil
+local checkDelay =
+    0.5
+
+--------------------------------------------------
+-- Runtime state
+--------------------------------------------------
+
+local casinoOpen =
+    false
+
+local lastStatus =
+    nil
 
 --------------------------------------------------
 -- Show waiting screen
@@ -122,6 +138,18 @@ local function showLogout(username)
 end
 
 --------------------------------------------------
+-- Reset machine state
+--------------------------------------------------
+
+local function resetMachineState()
+    machine.clearPlayer()
+
+    machine.setStatus(
+        protocol.STATUS_IDLE
+    )
+end
+
+--------------------------------------------------
 -- Attempt player login
 --------------------------------------------------
 
@@ -132,13 +160,24 @@ local function attemptLogin()
     if not success then
         if result ~= lastStatus then
             showWaiting(result)
-            lastStatus = result
+
+            lastStatus =
+                result
         end
 
         return
     end
 
-    local username = result
+    local username =
+        result
+
+    machine.setPlayer(
+        username
+    )
+
+    machine.setStatus(
+        protocol.STATUS_BUSY
+    )
 
     showWelcome(username)
 
@@ -147,6 +186,8 @@ local function attemptLogin()
 
     if not loaded then
         player.logout()
+
+        resetMachineState()
 
         showWaiting(
             loadResult
@@ -188,6 +229,8 @@ local function logoutPlayer()
 
     casinoOpen = false
 
+    resetMachineState()
+
     logger.info(
         "Player logged out: "
         .. username
@@ -203,27 +246,15 @@ local function logoutPlayer()
 end
 
 --------------------------------------------------
--- Initialize casino
---------------------------------------------------
-
-logger.info(
-    "Casino Application Starting"
-)
-
-display.init()
-
-showWaiting(
-    "APPROACH THE CASINO"
-)
-
---------------------------------------------------
 -- Touchscreen loop
 --------------------------------------------------
 
 local function touchscreenLoop()
     while true do
-        local event, side, x, y =
-            os.pullEvent("monitor_touch")
+        local _, side, x, y =
+            os.pullEvent(
+                "monitor_touch"
+            )
 
         if casinoOpen
         and side == monitorSide
@@ -255,13 +286,53 @@ local function playerDetectionLoop()
 end
 
 --------------------------------------------------
+-- Machine heartbeat loop
+--------------------------------------------------
+
+local function heartbeatLoop()
+    machine.heartbeatLoop()
+end
+
+--------------------------------------------------
+-- Initialize casino
+--------------------------------------------------
+
+local function initializeCasino()
+    logger.info(
+        "Casino Application Starting - Version "
+        .. protocol.VERSION
+    )
+
+    local started, problem =
+        machine.start()
+
+    if not started then
+        error(
+            problem
+            or "MACHINE COULD NOT START"
+        )
+    end
+
+    display.init()
+
+    resetMachineState()
+
+    showWaiting(
+        "APPROACH THE CASINO"
+    )
+end
+
+--------------------------------------------------
 -- Run casino systems simultaneously
 --------------------------------------------------
 
 local function runCasino()
+    initializeCasino()
+
     parallel.waitForAll(
         touchscreenLoop,
-        playerDetectionLoop
+        playerDetectionLoop,
+        heartbeatLoop
     )
 end
 
@@ -274,9 +345,20 @@ local success, problem =
 
 bank.unload()
 player.logout()
-display.clear()
+
+resetMachineState()
+machine.stop()
+
+pcall(
+    display.clear
+)
 
 if not success then
+    logger.error(
+        "Casino application stopped: "
+        .. tostring(problem)
+    )
+
     error(
         problem,
         0
