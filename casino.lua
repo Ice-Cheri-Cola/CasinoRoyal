@@ -210,9 +210,7 @@ logger.info(
     "Casino Application Starting"
 )
 
-display.init(
-    monitorSide
-)
+display.init()
 
 showWaiting(
     "APPROACH THE CASINO"
