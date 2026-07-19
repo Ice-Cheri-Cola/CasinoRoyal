@@ -1,15 +1,19 @@
 --================================================--
 -- Casino Royal
--- Version: 0.5.5
+-- Version: 2.2.0
 -- File: core/display.lua
 -- Description: Monitor drawing engine
 --================================================--
 
 local display = {}
-local theme = require("core.theme")
+
+local theme =
+    require("core.theme")
+
+local hardware =
+    require("core.hardware")
 
 local monitor = nil
-local monitorName = "top"
 
 --------------------------------------------------
 -- Get or reconnect monitor
@@ -17,14 +21,8 @@ local monitorName = "top"
 
 local function getMonitor()
     if monitor == nil then
-        monitor = peripheral.wrap(monitorName)
-    end
-
-    if monitor == nil then
-        error(
-            "Monitor not found: "
-            .. tostring(monitorName)
-        )
+        monitor =
+            hardware.getMonitor()
     end
 
     return monitor
@@ -34,19 +32,28 @@ end
 -- Initialize monitor
 --------------------------------------------------
 
-function display.init(name)
-    monitorName = name or "top"
-    monitor = peripheral.wrap(monitorName)
-
-    if monitor == nil then
-        error(
-            "Monitor not found: "
-            .. tostring(monitorName)
-        )
-    end
+function display.init()
+    monitor =
+        hardware.getMonitor()
 
     monitor.setTextScale(1)
+
     display.clear()
+end
+
+--------------------------------------------------
+-- Refresh monitor connection
+--------------------------------------------------
+
+function display.refresh()
+    hardware.scan()
+
+    monitor =
+        hardware.getMonitor()
+
+    monitor.setTextScale(1)
+
+    return monitor
 end
 
 --------------------------------------------------
@@ -54,13 +61,17 @@ end
 --------------------------------------------------
 
 function display.clear()
-    local screen = getMonitor()
+    local screen =
+        getMonitor()
 
     screen.setBackgroundColor(
         theme.get().background
     )
 
-    screen.setTextColor(colors.white)
+    screen.setTextColor(
+        colors.white
+    )
+
     screen.clear()
 end
 
@@ -69,7 +80,9 @@ end
 --------------------------------------------------
 
 function display.size()
-    local screen = getMonitor()
+    local screen =
+        getMonitor()
+
     return screen.getSize()
 end
 
@@ -78,17 +91,29 @@ end
 --------------------------------------------------
 
 function display.center(y, text, color)
-    local screen = getMonitor()
-    local width = screen.getSize()
+    local screen =
+        getMonitor()
 
-    local x = math.floor(
-        (width - #text) / 2
+    text =
+        tostring(text or "")
+
+    local width =
+        screen.getSize()
+
+    local x =
+        math.floor(
+            (width - #text) / 2
+        )
+
+    screen.setCursorPos(
+        x + 1,
+        y
     )
 
-    screen.setCursorPos(x + 1, y)
-
     if color then
-        screen.setTextColor(color)
+        screen.setTextColor(
+            color
+        )
     end
 
     screen.write(text)
@@ -101,7 +126,7 @@ end
 function display.title(text)
     display.center(
         2,
-        "* " .. text .. " *",
+        "* " .. tostring(text) .. " *",
         theme.get().primary
     )
 end
@@ -111,21 +136,38 @@ end
 --------------------------------------------------
 
 function display.border()
-    local screen = getMonitor()
-    local width, height = screen.getSize()
+    local screen =
+        getMonitor()
+
+    local width, height =
+        screen.getSize()
 
     screen.setTextColor(
         theme.get().secondary
     )
 
-    screen.setCursorPos(1, 1)
-    screen.write(
-        string.rep("=", width)
+    screen.setCursorPos(
+        1,
+        1
     )
 
-    screen.setCursorPos(1, height)
     screen.write(
-        string.rep("=", width)
+        string.rep(
+            "=",
+            width
+        )
+    )
+
+    screen.setCursorPos(
+        1,
+        height
+    )
+
+    screen.write(
+        string.rep(
+            "=",
+            width
+        )
     )
 end
 
