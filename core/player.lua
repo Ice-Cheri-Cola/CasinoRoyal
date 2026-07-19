@@ -111,18 +111,13 @@ function player.isStillNearby()
         return false
     end
 
-    local nearby =
-        player.getNearbyPlayers()
+    local device =
+        findDetector()
 
-    for _, username
-        in ipairs(nearby)
-    do
-        if username == currentPlayer then
-            return true
-        end
-    end
-
-    return false
+    return device.isPlayerInRange(
+        detectionRange,
+        currentPlayer
+    )
 end
 
 --------------------------------------------------
