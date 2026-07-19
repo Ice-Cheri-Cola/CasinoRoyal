@@ -1,6 +1,6 @@
 --================================================--
 -- Casino Royal
--- Version: 0.1.0
+-- Version: 1.0.0
 -- File: core/hardware.lua
 -- Description: Hardware detection and management
 --================================================--
@@ -10,108 +10,180 @@ local hardware = {}
 hardware.devices = {
     monitor = nil,
     speaker = nil,
+    playerDetector = nil,
     inventory = nil,
     storage = nil,
     allMonitors = {}
 }
 
+--------------------------------------------------
+-- Reset detected hardware
+--------------------------------------------------
+
+function hardware.reset()
+    hardware.devices.monitor = nil
+    hardware.devices.speaker = nil
+    hardware.devices.playerDetector = nil
+    hardware.devices.inventory = nil
+    hardware.devices.storage = nil
+    hardware.devices.allMonitors = {}
+end
 
 --------------------------------------------------
 -- Scan all attached peripherals
 --------------------------------------------------
 
 function hardware.scan()
+    hardware.reset()
 
-    local peripherals = peripheral.getNames()
+    local peripherals =
+        peripheral.getNames()
 
-    for _, name in ipairs(peripherals) do
-        
-        local pType = peripheral.getType(name)
+    for _, name
+        in ipairs(peripherals)
+    do
+        local pType =
+            peripheral.getType(name)
 
         if pType then
 
-            -- Detect monitors
             if pType == "monitor" then
-                
                 table.insert(
                     hardware.devices.allMonitors,
                     name
                 )
 
-                -- Prefer top monitor
                 if name == "top" then
-                    hardware.devices.monitor = name
+                    hardware.devices.monitor =
+                        name
                 end
-
             end
 
-
-            -- Detect speakers
             if pType == "speaker" then
-                hardware.devices.speaker = name
+                hardware.devices.speaker =
+                    name
             end
 
+            if pType == "player_detector" then
+                hardware.devices.playerDetector =
+                    name
+            end
 
-            -- Detect inventory managers
             if pType == "inventory_manager" then
-                hardware.devices.inventory = name
+                hardware.devices.inventory =
+                    name
             end
 
-
-            -- Detect storage inventories
-            if string.find(pType, "inventory") then
-                hardware.devices.storage = name
+            if string.find(
+                pType,
+                "inventory"
+            )
+            and pType ~= "inventory_manager"
+            then
+                hardware.devices.storage =
+                    name
             end
-
         end
     end
 
-
-    -- If top monitor was not found,
-    -- choose first available monitor
-
     if hardware.devices.monitor == nil then
-        
         hardware.devices.monitor =
             hardware.devices.allMonitors[1]
-
     end
 
-
     return hardware.devices
-
 end
 
-
-
 --------------------------------------------------
--- Get hardware information
+-- Get all hardware information
 --------------------------------------------------
 
 function hardware.get()
-
     return hardware.devices
-
 end
 
+--------------------------------------------------
+-- Get wrapped monitor
+--------------------------------------------------
 
+function hardware.getMonitor()
+    if hardware.devices.monitor == nil then
+        hardware.scan()
+    end
+
+    if hardware.devices.monitor == nil then
+        error(
+            "Monitor not found. "
+            .. "Check the wired network."
+        )
+    end
+
+    return peripheral.wrap(
+        hardware.devices.monitor
+    )
+end
 
 --------------------------------------------------
--- Check if required hardware exists
+-- Get wrapped Player Detector
+--------------------------------------------------
+
+function hardware.getPlayerDetector()
+    if hardware.devices.playerDetector == nil then
+        hardware.scan()
+    end
+
+    if hardware.devices.playerDetector == nil then
+        error(
+            "Player Detector not found. "
+            .. "Check the wired network."
+        )
+    end
+
+    return peripheral.wrap(
+        hardware.devices.playerDetector
+    )
+end
+
+--------------------------------------------------
+-- Get wrapped speaker
+--------------------------------------------------
+
+function hardware.getSpeaker()
+    if hardware.devices.speaker == nil then
+        hardware.scan()
+    end
+
+    if hardware.devices.speaker == nil then
+        return nil
+    end
+
+    return peripheral.wrap(
+        hardware.devices.speaker
+    )
+end
+
+--------------------------------------------------
+-- Check whether optional speaker exists
+--------------------------------------------------
+
+function hardware.hasSpeaker()
+    return hardware.getSpeaker()
+        ~= nil
+end
+
+--------------------------------------------------
+-- Check required casino hardware
 --------------------------------------------------
 
 function hardware.ready()
-
-    if hardware.devices.monitor
-    and hardware.devices.speaker
+    if hardware.devices.monitor == nil
+    or hardware.devices.playerDetector == nil
     then
-        return true
+        hardware.scan()
     end
 
-    return false
-
+    return hardware.devices.monitor ~= nil
+        and hardware.devices.playerDetector ~= nil
 end
-
-
 
 return hardware
