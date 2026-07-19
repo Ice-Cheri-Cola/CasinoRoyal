@@ -1,38 +1,285 @@
 --================================================--
 -- Casino Royal
--- Version: 0.5.4
+-- Version: 2.1.0
 -- File: casino.lua
--- Description: Main application controller
+-- Description: Player login and application controller
 --================================================--
 
-local logger = require("core.logger")
-local menu = require("games.menu")
-local display = require("core.display")
-local ui = require("core.ui")
+local logger =
+    require("core.logger")
 
-logger.info("Casino Application Starting")
+local menu =
+    require("games.menu")
+
+local display =
+    require("core.display")
+
+local ui =
+    require("core.ui")
+
+local player =
+    require("core.player")
+
+local bank =
+    require("core.bank")
 
 --------------------------------------------------
--- Initialize monitor
+-- Settings
 --------------------------------------------------
 
-display.init("top")
+local monitorSide = "top"
+local checkDelay = 0.5
+
+local casinoOpen = false
+local lastStatus = nil
 
 --------------------------------------------------
--- Load lobby
+-- Show waiting screen
 --------------------------------------------------
 
-menu.open()
+local function showWaiting(message)
+    ui.clearButton()
+    display.clear()
+    display.border()
+
+    display.center(
+        2,
+        "CASINO ROYAL"
+    )
+
+    display.center(
+        5,
+        "WAITING FOR PLAYER"
+    )
+
+    display.center(
+        7,
+        message
+        or "APPROACH THE CASINO"
+    )
+
+    display.center(
+        9,
+        "RANGE: "
+        .. player.getRange()
+        .. " BLOCKS"
+    )
+end
 
 --------------------------------------------------
--- Touchscreen loop
+-- Show login message
 --------------------------------------------------
+
+local function showWelcome(username)
+    ui.clearButton()
+    display.clear()
+    display.border()
+
+    display.center(
+        2,
+        "CASINO ROYAL"
+    )
+
+    display.center(
+        5,
+        "WELCOME"
+    )
+
+    display.center(
+        7,
+        username
+    )
+
+    display.center(
+        9,
+        "LOADING ACCOUNT..."
+    )
+end
+
+--------------------------------------------------
+-- Show logout message
+--------------------------------------------------
+
+local function showLogout(username)
+    ui.clearButton()
+    display.clear()
+    display.border()
+
+    display.center(
+        4,
+        "PLAYER LEFT"
+    )
+
+    display.center(
+        6,
+        username
+    )
+
+    display.center(
+        8,
+        "SAVING ACCOUNT..."
+    )
+end
+
+--------------------------------------------------
+-- Attempt player login
+--------------------------------------------------
+
+local function attemptLogin()
+    local success, result =
+        player.login()
+
+    if not success then
+        if result ~= lastStatus then
+            showWaiting(result)
+            lastStatus = result
+        end
+
+        return
+    end
+
+    local username = result
+
+    showWelcome(username)
+
+    local loaded, loadResult =
+        bank.loadPlayer()
+
+    if not loaded then
+        player.logout()
+
+        showWaiting(
+            loadResult
+            or "ACCOUNT LOAD FAILED"
+        )
+
+        lastStatus =
+            loadResult
+
+        return
+    end
+
+    logger.info(
+        "Player logged in: "
+        .. username
+    )
+
+    sleep(1)
+
+    casinoOpen = true
+    lastStatus = nil
+
+    menu.open()
+end
+
+--------------------------------------------------
+-- Log out active player
+--------------------------------------------------
+
+local function logoutPlayer()
+    local username =
+        player.getName()
+        or "UNKNOWN"
+
+    showLogout(username)
+
+    bank.unload()
+    player.logout()
+
+    casinoOpen = false
+
+    logger.info(
+        "Player logged out: "
+        .. username
+    )
+
+    sleep(1)
+
+    showWaiting(
+        "APPROACH THE CASINO"
+    )
+
+    lastStatus = nil
+end
+
+--------------------------------------------------
+-- Initialize casino
+--------------------------------------------------
+
+logger.info(
+    "Casino Application Starting"
+)
+
+display.init(
+    monitorSide
+)
+
+showWaiting(
+    "APPROACH THE CASINO"
+)
+
+--------------------------------------------------
+-- Main event loop
+--------------------------------------------------
+
+local timer =
+    os.startTimer(checkDelay)
 
 while true do
-    local event, side, x, y =
-        os.pullEvent("monitor_touch")
+    local event, value1, value2, value3 =
+        os.pullEvent()
 
-    if side == "top" then
-        ui.handleTouch(x, y)
+    ----------------------------------------------
+    -- Touchscreen event
+    ----------------------------------------------
+
+    if event == "monitor_touch" then
+        local side = value1
+        local x = value2
+        local y = value3
+
+        if casinoOpen
+        and side == monitorSide
+        then
+            ui.handleTouch(
+                x,
+                y
+            )
+        end
+
+    ----------------------------------------------
+    -- Player-check timer
+    ----------------------------------------------
+
+    elseif event == "timer"
+    and value1 == timer
+    then
+        if player.isLoggedIn() then
+            if not player.isStillNearby() then
+                logoutPlayer()
+            end
+        else
+            attemptLogin()
+        end
+
+        timer =
+            os.startTimer(
+                checkDelay
+            )
+
+    ----------------------------------------------
+    -- Safe shutdown
+    ----------------------------------------------
+
+    elseif event == "terminate" then
+        bank.unload()
+        player.logout()
+
+        display.clear()
+
+        error(
+            "Casino Royal stopped",
+            0
+        )
     end
 end
