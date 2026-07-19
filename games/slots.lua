@@ -15,6 +15,8 @@ local slots = {}
 
 function slots.open()
 
+    ui.clearButtons()
+    
     display.clear()
 
     display.center(
