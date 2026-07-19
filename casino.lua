@@ -219,24 +219,13 @@ showWaiting(
 )
 
 --------------------------------------------------
--- Main event loop
+-- Touchscreen loop
 --------------------------------------------------
 
-local timer =
-    os.startTimer(checkDelay)
-
-while true do
-    local event, value1, value2, value3 =
-        os.pullEvent()
-
-    ----------------------------------------------
-    -- Touchscreen event
-    ----------------------------------------------
-
-    if event == "monitor_touch" then
-        local side = value1
-        local x = value2
-        local y = value3
+local function touchscreenLoop()
+    while true do
+        local event, side, x, y =
+            os.pullEvent("monitor_touch")
 
         if casinoOpen
         and side == monitorSide
@@ -246,14 +235,15 @@ while true do
                 y
             )
         end
+    end
+end
 
-    ----------------------------------------------
-    -- Player-check timer
-    ----------------------------------------------
+--------------------------------------------------
+-- Player detection loop
+--------------------------------------------------
 
-    elseif event == "timer"
-    and value1 == timer
-    then
+local function playerDetectionLoop()
+    while true do
         if player.isLoggedIn() then
             if not player.isStillNearby() then
                 logoutPlayer()
@@ -262,24 +252,35 @@ while true do
             attemptLogin()
         end
 
-        timer =
-            os.startTimer(
-                checkDelay
-            )
-
-    ----------------------------------------------
-    -- Safe shutdown
-    ----------------------------------------------
-
-    elseif event == "terminate" then
-        bank.unload()
-        player.logout()
-
-        display.clear()
-
-        error(
-            "Casino Royal stopped",
-            0
-        )
+        sleep(checkDelay)
     end
+end
+
+--------------------------------------------------
+-- Run casino systems simultaneously
+--------------------------------------------------
+
+local function runCasino()
+    parallel.waitForAll(
+        touchscreenLoop,
+        playerDetectionLoop
+    )
+end
+
+--------------------------------------------------
+-- Safe shutdown
+--------------------------------------------------
+
+local success, problem =
+    pcall(runCasino)
+
+bank.unload()
+player.logout()
+display.clear()
+
+if not success then
+    error(
+        problem,
+        0
+    )
 end
