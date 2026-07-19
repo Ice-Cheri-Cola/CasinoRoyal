@@ -13,7 +13,13 @@ local theme = require("core.theme")
 
 ui.buttons = {}
 
+--------------------------------------------------
+-- Create a button
+--------------------------------------------------
 
+function ui.clearButton()
+    ui.buttons = ()
+end
 
 --------------------------------------------------
 -- Create a button
