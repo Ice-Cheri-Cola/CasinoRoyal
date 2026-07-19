@@ -1,68 +1,38 @@
 --================================================--
 -- Casino Royal
--- Version: 0.3.0
+-- Version: 0.5.4
 -- File: casino.lua
 -- Description: Main application controller
 --================================================--
 
+local logger = require("core.logger")
+local menu = require("games.menu")
+local display = require("core.display")
+local ui = require("core.ui")
 
-local logger =
-    require("core.logger")
-
-
-local menu =
-    require("games.menu")
-
-
-local hardware =
-    require("core.hardware")
-
-
-
-logger.info(
-    "Casino Application Starting"
-)
-
-
+logger.info("Casino Application Starting")
 
 --------------------------------------------------
--- Load Lobby
+-- Initialize monitor
+--------------------------------------------------
+
+display.init("top")
+
+--------------------------------------------------
+-- Load lobby
 --------------------------------------------------
 
 menu.open()
 
-
-
 --------------------------------------------------
--- Touchscreen Loop
+-- Touchscreen loop
 --------------------------------------------------
-
-local monitor =
-    peripheral.wrap("top")
-
-
 
 while true do
-
-    local event,
-          side,
-          x,
-          y =
+    local event, side, x, y =
         os.pullEvent("monitor_touch")
 
-
-
     if side == "top" then
-
-        local ui =
-            require("core.ui")
-
-
-        ui.handleTouch(
-            x,
-            y
-        )
-
+        ui.handleTouch(x, y)
     end
-
 end
