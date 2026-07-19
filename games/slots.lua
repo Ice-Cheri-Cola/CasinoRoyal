@@ -27,7 +27,7 @@ function slots.open()
 
     display.center(
         5,
-        "💎  7  🍒"
+        "[DI]  [7]  [EM]"
     )
 
 
@@ -39,14 +39,30 @@ function slots.open()
 
     ui.button(
         "PLAY",
-        8,
+        5,
         12,
-        8,
-        2,
+        10,
+        3,
 
         function()
 
             print("Spinning!")
+
+        end
+    )
+    
+        ui.button(
+            "BACK",
+            18,
+            12,
+            10,
+            3,
+
+        function()
+
+                local menu = require("games.menu")
+
+            menu.open()
 
         end
     )
