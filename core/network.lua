@@ -1,26 +1,31 @@
 --================================================--
 -- Casino Royal
--- Version: 3.1.0
+-- Version: 4.0.0
 -- File: core/network.lua
 -- Description: Casino network communication system
 --================================================--
 
-local network = {}
-
 --------------------------------------------------
--- Network settings
+-- Requires
 --------------------------------------------------
 
 local protocol =
-    "casino_royal"
+    require("core.protocol")
 
-local serverHostname =
-    "casino_royal_server"
+--------------------------------------------------
+-- Module
+--------------------------------------------------
+
+local network = {}
+
+--------------------------------------------------
+-- State
+--------------------------------------------------
 
 local openedModems = {}
 
 --------------------------------------------------
--- Build a network message
+-- Private: Create network message
 --------------------------------------------------
 
 local function createMessage(
@@ -28,7 +33,8 @@ local function createMessage(
     data
 )
     return {
-        version = "3.1.0",
+        version =
+            protocol.VERSION,
 
         type =
             tostring(
@@ -52,7 +58,7 @@ local function createMessage(
 end
 
 --------------------------------------------------
--- Validate received message
+-- Private: Validate received message
 --------------------------------------------------
 
 local function isValidMessage(message)
@@ -62,7 +68,19 @@ local function isValidMessage(message)
 end
 
 --------------------------------------------------
--- Find and open attached modems
+-- Private: Ensure network is open
+--------------------------------------------------
+
+local function ensureOpen()
+    if network.isOpen() then
+        return true
+    end
+
+    return network.open()
+end
+
+--------------------------------------------------
+-- Open all attached modems
 --------------------------------------------------
 
 function network.open()
@@ -122,8 +140,7 @@ function network.isOpen()
     for _, name
         in ipairs(peripheral.getNames())
     do
-        if peripheral.getType(name)
-            == "modem"
+        if peripheral.getType(name) == "modem"
         and rednet.isOpen(name)
         then
             return true
@@ -150,73 +167,68 @@ function network.getModems()
 end
 
 --------------------------------------------------
--- Host the central casino server
+-- Host central casino server
 --------------------------------------------------
 
 function network.hostServer()
-    if not network.isOpen() then
-        local success, problem =
-            network.open()
+    local success, problem =
+        ensureOpen()
 
-        if not success then
-            return false,
-                problem
-        end
+    if not success then
+        return false,
+            problem
     end
 
     local existing =
         rednet.lookup(
-            protocol,
-            serverHostname
+            protocol.REDNET_PROTOCOL,
+            protocol.SERVER_HOSTNAME
         )
 
     if existing
-    and existing
-        ~= os.getComputerID()
+    and existing ~= os.getComputerID()
     then
         return false,
             "ANOTHER CASINO SERVER IS ONLINE"
     end
 
     rednet.host(
-        protocol,
-        serverHostname
+        protocol.REDNET_PROTOCOL,
+        protocol.SERVER_HOSTNAME
     )
 
     return true
 end
 
 --------------------------------------------------
--- Stop hosting the server
+-- Stop hosting central server
 --------------------------------------------------
 
 function network.unhostServer()
     pcall(
         rednet.unhost,
-        protocol,
-        serverHostname
+        protocol.REDNET_PROTOCOL,
+        protocol.SERVER_HOSTNAME
     )
 end
 
 --------------------------------------------------
--- Find the central casino server
+-- Find central casino server
 --------------------------------------------------
 
 function network.findServer()
-    if not network.isOpen() then
-        local success, problem =
-            network.open()
+    local success, problem =
+        ensureOpen()
 
-        if not success then
-            return nil,
-                problem
-        end
+    if not success then
+        return nil,
+            problem
     end
 
     local serverId =
         rednet.lookup(
-            protocol,
-            serverHostname
+            protocol.REDNET_PROTOCOL,
+            protocol.SERVER_HOSTNAME
         )
 
     if serverId == nil then
@@ -228,7 +240,7 @@ function network.findServer()
 end
 
 --------------------------------------------------
--- Send message to a computer
+-- Send message to computer
 --------------------------------------------------
 
 function network.send(
@@ -241,14 +253,17 @@ function network.send(
             "INVALID COMPUTER ID"
     end
 
-    if not network.isOpen() then
-        local success, problem =
-            network.open()
+    if type(messageType) ~= "string" then
+        return false,
+            "INVALID MESSAGE TYPE"
+    end
 
-        if not success then
-            return false,
-                problem
-        end
+    local success, problem =
+        ensureOpen()
+
+    if not success then
+        return false,
+            problem
     end
 
     local message =
@@ -261,7 +276,7 @@ function network.send(
         rednet.send(
             computerId,
             message,
-            protocol
+            protocol.REDNET_PROTOCOL
         )
 
     if not sent then
@@ -296,21 +311,24 @@ function network.sendToServer(
 end
 
 --------------------------------------------------
--- Broadcast a casino message
+-- Broadcast casino message
 --------------------------------------------------
 
 function network.broadcast(
     messageType,
     data
 )
-    if not network.isOpen() then
-        local success, problem =
-            network.open()
+    if type(messageType) ~= "string" then
+        return false,
+            "INVALID MESSAGE TYPE"
+    end
 
-        if not success then
-            return false,
-                problem
-        end
+    local success, problem =
+        ensureOpen()
+
+    if not success then
+        return false,
+            problem
     end
 
     rednet.broadcast(
@@ -318,31 +336,29 @@ function network.broadcast(
             messageType,
             data
         ),
-        protocol
+        protocol.REDNET_PROTOCOL
     )
 
     return true
 end
 
 --------------------------------------------------
--- Receive a casino message
+-- Receive casino message
 --------------------------------------------------
 
 function network.receive(timeout)
-    if not network.isOpen() then
-        local success, problem =
-            network.open()
+    local success, problem =
+        ensureOpen()
 
-        if not success then
-            return nil,
-                nil,
-                problem
-        end
+    if not success then
+        return nil,
+            nil,
+            problem
     end
 
     local senderId, message =
         rednet.receive(
-            protocol,
+            protocol.REDNET_PROTOCOL,
             timeout
         )
 
@@ -363,7 +379,7 @@ function network.receive(timeout)
 end
 
 --------------------------------------------------
--- Reply to a received message
+-- Reply to received message
 --------------------------------------------------
 
 function network.reply(
@@ -379,11 +395,33 @@ function network.reply(
 end
 
 --------------------------------------------------
--- Get network protocol
+-- Create message without sending
+--------------------------------------------------
+
+function network.createMessage(
+    messageType,
+    data
+)
+    return createMessage(
+        messageType,
+        data
+    )
+end
+
+--------------------------------------------------
+-- Validate network message
+--------------------------------------------------
+
+function network.isValidMessage(message)
+    return isValidMessage(message)
+end
+
+--------------------------------------------------
+-- Get Rednet protocol name
 --------------------------------------------------
 
 function network.getProtocol()
-    return protocol
+    return protocol.REDNET_PROTOCOL
 end
 
 --------------------------------------------------
@@ -391,7 +429,19 @@ end
 --------------------------------------------------
 
 function network.getServerHostname()
-    return serverHostname
+    return protocol.SERVER_HOSTNAME
 end
+
+--------------------------------------------------
+-- Get protocol version
+--------------------------------------------------
+
+function network.getVersion()
+    return protocol.VERSION
+end
+
+--------------------------------------------------
+-- Return module
+--------------------------------------------------
 
 return network
