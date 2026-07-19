@@ -1,133 +1,176 @@
 --================================================--
 -- Casino Royal
--- Version: 0.1.0
+-- Version: 3.0.0
 -- File: startup.lua
--- Description: Main boot sequence
+-- Description: Automatic machine role launcher
 --================================================--
 
+local machine = require("core.machine")
+local logger = require("core.logger")
 
 --------------------------------------------------
--- Load modules
+-- Terminal helpers
 --------------------------------------------------
 
-local config = require("config")
-
-local hardware =
-    require("core.hardware")
-
-local logger =
-    require("core.logger")
-
-local display =
-    require("core.display")
-
-
-
---------------------------------------------------
--- Boot Start
---------------------------------------------------
-
-logger.clear()
-
-logger.info(
-    "Casino Royal Starting"
-)
-
-
---------------------------------------------------
--- Hardware Scan
---------------------------------------------------
-
-local devices =
-    hardware.scan()
-
-
-logger.info(
-    "Hardware Scan Complete"
-)
-
-
-
---------------------------------------------------
--- Check Monitor
---------------------------------------------------
-
-if devices.monitor == nil then
-
-    logger.error(
-        "No monitor detected"
-    )
-
-    print(
-        "ERROR: No monitor found"
-    )
-
-    return
-
+local function clearTerminal()
+    term.setBackgroundColor(colors.black)
+    term.setTextColor(colors.white)
+    term.clear()
+    term.setCursorPos(1, 1)
 end
 
+local function centerText(y, text, color)
+    local width, _ = term.getSize()
 
+    text = tostring(text or "")
+
+    local x =
+        math.floor((width - #text) / 2) + 1
+
+    term.setCursorPos(math.max(1, x), y)
+
+    if color then
+        term.setTextColor(color)
+    end
+
+    term.write(text)
+
+    term.setTextColor(colors.white)
+end
 
 --------------------------------------------------
--- Initialize Display
+-- Boot Screen
 --------------------------------------------------
 
-display.init(
-    devices.monitor
-)
+local function showBoot(config)
+    clearTerminal()
 
+    centerText(2, "CASINO ROYAL", colors.yellow)
+    centerText(4, config.name, colors.cyan)
+    centerText(6, "TYPE: "..string.upper(config.type), colors.lightGray)
+    centerText(8, "STARTING...", colors.lime)
+
+    sleep(1)
+end
 
 --------------------------------------------------
--- Draw Boot Screen
+-- Error Screen
 --------------------------------------------------
 
-display.clear()
+local function showError(message)
+    clearTerminal()
 
+    centerText(2, "CASINO ROYAL", colors.yellow)
+    centerText(4, "STARTUP ERROR", colors.red)
 
-display.border()
+    term.setCursorPos(1, 7)
 
+    print(tostring(message or "Unknown startup error"))
+    print("")
+    print("Run 'setup' to configure this machine.")
+end
 
-display.center(
-    4,
-    "CASINO ROYAL",
-    colors.yellow
-)
+--------------------------------------------------
+-- File exists?
+--------------------------------------------------
 
+local function exists(path)
+    return fs.exists(path) and not fs.isDir(path)
+end
 
-display.center(
-    6,
-    "ATM10 EDITION",
-    colors.cyan
-)
+--------------------------------------------------
+-- Launch program
+--------------------------------------------------
 
+local function launch(config)
 
-display.center(
-    8,
-    "Initializing...",
-    colors.white
-)
+    local programs = {
+        menu = "casino.lua",
+        slots = "games/slots.lua",
+        blackjack = "blackjack.lua",
+        roulette = "roulette.lua",
+        higher_lower = "higher_lower.lua",
+        video_poker = "video_poker.lua",
+        craps = "craps.lua",
+        atm = "atm.lua",
+        admin = "admin.lua",
+        server = "server.lua"
+    }
 
+    local program = programs[config.type]
 
-sleep(2)
+    if not program then
+        return false,
+            "Unknown machine type: "..tostring(config.type)
+    end
 
+    if not exists(program) then
+        return false,
+            "Program not found: "..program
+    end
 
-display.clear()
+    logger.info(
+        "Launching "..config.type
+    )
 
-display.border()
+    local ok =
+        shell.run(program)
 
+    if not ok then
+        return false,
+            "Program stopped or failed: "..program
+    end
 
-display.title(
-    config.casinoName
-)
+    return true
+end
 
+--------------------------------------------------
+-- Main
+--------------------------------------------------
 
-display.center(
-    6,
-    "SYSTEM READY",
-    colors.lime
-)
+local function main()
 
+    logger.info(
+        "Casino Royal Boot"
+    )
 
-logger.info(
-    "Casino Royal Ready"
-)
+    local config, err =
+        machine.load()
+
+    if not config then
+        showError(err)
+        return
+    end
+
+    if config.enabled == false then
+        clearTerminal()
+
+        centerText(3,
+            "MACHINE DISABLED",
+            colors.red)
+
+        return
+    end
+
+    showBoot(config)
+
+    local ok, problem =
+        launch(config)
+
+    if not ok then
+        logger.error(problem)
+        showError(problem)
+    end
+end
+
+--------------------------------------------------
+-- Safe Start
+--------------------------------------------------
+
+local ok, err =
+    pcall(main)
+
+if not ok then
+    logger.error(err)
+    showError(err)
+end
