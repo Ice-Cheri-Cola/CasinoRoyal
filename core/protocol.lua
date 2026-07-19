@@ -1,6 +1,6 @@
 --================================================--
 -- Casino Royal
--- Version: 4.0.0
+-- Version: 4.1.0
 -- File: core/protocol.lua
 -- Description: Shared network protocol definitions
 --================================================--
@@ -12,7 +12,7 @@ local protocol = {}
 --------------------------------------------------
 
 protocol.VERSION =
-    "4.0.0"
+    "4.1.0"
 
 --------------------------------------------------
 -- Rednet
@@ -25,7 +25,7 @@ protocol.SERVER_HOSTNAME =
     "casino_royal_server"
 
 --------------------------------------------------
--- Machine Messages
+-- Machine messages
 --------------------------------------------------
 
 protocol.REGISTER =
@@ -79,8 +79,26 @@ protocol.BALANCE_REPLY =
 protocol.DEPOSIT =
     "deposit"
 
+protocol.DEPOSIT_REPLY =
+    "deposit_reply"
+
 protocol.WITHDRAW =
     "withdraw"
+
+protocol.WITHDRAW_REPLY =
+    "withdraw_reply"
+
+protocol.ACCOUNT =
+    "account"
+
+protocol.ACCOUNT_REPLY =
+    "account_reply"
+
+protocol.RECORD_GAME =
+    "record_game"
+
+protocol.RECORD_GAME_REPLY =
+    "record_game_reply"
 
 --------------------------------------------------
 -- Transactions
@@ -125,7 +143,7 @@ protocol.STATUS_OFFLINE =
     "offline"
 
 --------------------------------------------------
--- Generic Replies
+-- Generic results
 --------------------------------------------------
 
 protocol.SUCCESS =
@@ -133,5 +151,9 @@ protocol.SUCCESS =
 
 protocol.ERROR =
     "error"
+
+--------------------------------------------------
+-- Return module
+--------------------------------------------------
 
 return protocol
