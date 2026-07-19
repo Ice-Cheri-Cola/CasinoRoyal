@@ -1,42 +1,31 @@
 --================================================--
 -- Casino Royal
--- Version: 0.3.0
+-- Version: 0.5.6
 -- File: games/menu.lua
 -- Description: Main casino lobby
 --================================================--
 
-local display =
-    require("core.display")
-
-local ui =
-    require("core.ui")
-
-local theme =
-    require("core.theme")
-
-
+local display = require("core.display")
+local ui = require("core.ui")
+local theme = require("core.theme")
+local slots = require("games.slots")
 
 local menu = {}
 
-
-
 --------------------------------------------------
--- Open Lobby
+-- Open lobby
 --------------------------------------------------
 
 function menu.open()
-
+    ui.clear()
     display.clear()
-
     display.border()
-
 
     display.center(
         2,
-        "◇ CASINO ROYAL ◇",
+        "CASINO ROYAL",
         theme.get().primary
     )
-
 
     display.center(
         3,
@@ -44,28 +33,16 @@ function menu.open()
         theme.get().accent
     )
 
-
-
-    ui.clear()
-
-
-
     ui.button(
         "SLOTS",
         4,
         5,
         10,
         2,
-
         function()
-
-            print("Opening Slots")
-
+            slots.open()
         end
-
     )
-
-
 
     ui.button(
         "GAMES",
@@ -73,16 +50,13 @@ function menu.open()
         8,
         10,
         2,
-
         function()
-
-            print("Opening Games")
-
+            display.center(
+                15,
+                "COMING SOON!"
+            )
         end
-
     )
-
-
 
     ui.button(
         "ADMIN",
@@ -90,18 +64,13 @@ function menu.open()
         11,
         10,
         2,
-
         function()
-
-            print("Opening Admin")
-
+            display.center(
+                15,
+                "COMING SOON!"
+            )
         end
-
     )
-
-
 end
-
-
 
 return menu
