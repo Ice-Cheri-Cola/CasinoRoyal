@@ -1,38 +1,24 @@
 --================================================--
 -- Casino Royal
--- Version: 2.0.0
+-- Version: 2.2.0
 -- File: core/player.lua
 -- Description: Player Detector login system
 --================================================--
 
 local player = {}
 
-local detector = nil
+local hardware =
+    require("core.hardware")
+
 local currentPlayer = nil
 local detectionRange = 5
 
 --------------------------------------------------
--- Find Player Detector
+-- Get Player Detector
 --------------------------------------------------
 
-local function findDetector()
-    if detector ~= nil then
-        return detector
-    end
-
-    detector =
-        peripheral.find(
-            "player_detector"
-        )
-
-    if detector == nil then
-        error(
-            "Player Detector not found. "
-            .. "Check the wired network."
-        )
-    end
-
-    return detector
+local function getDetector()
+    return hardware.getPlayerDetector()
 end
 
 --------------------------------------------------
@@ -40,10 +26,11 @@ end
 --------------------------------------------------
 
 function player.getNearbyPlayers()
-    local device = findDetector()
+    local detector =
+        getDetector()
 
     local nearby =
-        device.getPlayersInRange(
+        detector.getPlayersInRange(
             detectionRange
         )
 
@@ -72,7 +59,8 @@ function player.login()
             "ONLY ONE PLAYER MAY LOGIN"
     end
 
-    currentPlayer = nearby[1]
+    currentPlayer =
+        nearby[1]
 
     return true,
         currentPlayer
@@ -111,10 +99,10 @@ function player.isStillNearby()
         return false
     end
 
-    local device =
-        findDetector()
+    local detector =
+        getDetector()
 
-    return device.isPlayerInRange(
+    return detector.isPlayerInRange(
         detectionRange,
         currentPlayer
     )
