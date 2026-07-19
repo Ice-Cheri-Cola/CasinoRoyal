@@ -1,8 +1,8 @@
 --================================================--
 -- Casino Royal
--- Version: 0.7.0
+-- Version: 0.8.0
 -- File: games/slots.lua
--- Description: Royal Slots game
+-- Description: Animated Royal Slots with credits
 --================================================--
 
 local display = require("core.display")
@@ -11,8 +11,11 @@ local ui = require("core.ui")
 local slots = {}
 
 --------------------------------------------------
--- Slot symbols
+-- Game settings
 --------------------------------------------------
+
+local balance = 100
+local spinCost = 5
 
 local symbols = {
     "[GO]",
@@ -22,6 +25,14 @@ local symbols = {
     "[DE]"
 }
 
+local payouts = {
+    ["[GO]"] = 15,
+    ["[DI]"] = 25,
+    ["[EM]"] = 40,
+    ["[NS]"] = 60,
+    ["[DE]"] = 100
+}
+
 --------------------------------------------------
 -- Random setup
 --------------------------------------------------
@@ -29,13 +40,59 @@ local symbols = {
 math.randomseed(os.epoch("utc"))
 
 --------------------------------------------------
--- Select a random symbol
+-- Clear one monitor line
+--------------------------------------------------
+
+local function clearLine(y)
+    local monitor = peripheral.wrap("top")
+
+    if monitor then
+        local width = monitor.getSize()
+
+        monitor.setCursorPos(1, y)
+        monitor.write(
+            string.rep(" ", width)
+        )
+    end
+end
+
+--------------------------------------------------
+-- Random symbol
 --------------------------------------------------
 
 local function randomSymbol()
     return symbols[
         math.random(#symbols)
     ]
+end
+
+--------------------------------------------------
+-- Draw balance
+--------------------------------------------------
+
+local function drawBalance()
+    clearLine(3)
+
+    display.center(
+        3,
+        "CREDITS: "
+        .. balance
+        .. "   COST: "
+        .. spinCost
+    )
+end
+
+--------------------------------------------------
+-- Draw message
+--------------------------------------------------
+
+local function drawMessage(message)
+    clearLine(8)
+
+    display.center(
+        8,
+        message
+    )
 end
 
 --------------------------------------------------
@@ -47,6 +104,8 @@ local function drawReels(
     reel2,
     reel3
 )
+    clearLine(5)
+
     display.center(
         5,
         reel1
@@ -63,14 +122,10 @@ end
 
 local function animateSpin()
     for frame = 1, 12 do
-        local reel1 = randomSymbol()
-        local reel2 = randomSymbol()
-        local reel3 = randomSymbol()
-
         drawReels(
-            reel1,
-            reel2,
-            reel3
+            randomSymbol(),
+            randomSymbol(),
+            randomSymbol()
         )
 
         sleep(0.08)
@@ -78,16 +133,49 @@ local function animateSpin()
 end
 
 --------------------------------------------------
--- Spin the reels
+-- Count matching symbols
+--------------------------------------------------
+
+local function getMatchCount(
+    reel1,
+    reel2,
+    reel3
+)
+    if reel1 == reel2
+    and reel2 == reel3
+    then
+        return 3
+    end
+
+    if reel1 == reel2
+    or reel1 == reel3
+    or reel2 == reel3
+    then
+        return 2
+    end
+
+    return 0
+end
+
+--------------------------------------------------
+-- Spin reels
 --------------------------------------------------
 
 local function spin()
+    if balance < spinCost then
+        drawMessage(
+            "NOT ENOUGH CREDITS!"
+        )
+
+        return
+    end
+
     ui.clearButton()
 
-    display.center(
-        8,
-        "SPINNING...   "
-    )
+    balance = balance - spinCost
+
+    drawBalance()
+    drawMessage("SPINNING...")
 
     animateSpin()
 
@@ -101,20 +189,39 @@ local function spin()
         reel3
     )
 
-    if reel1 == reel2
-    and reel2 == reel3
-    then
-        display.center(
-            8,
-            "ROYAL WIN!   "
+    local matches = getMatchCount(
+        reel1,
+        reel2,
+        reel3
+    )
+
+    if matches == 3 then
+        local prize = payouts[reel1]
+
+        balance = balance + prize
+
+        drawMessage(
+            "ROYAL WIN! +"
+            .. prize
         )
+
+    elseif matches == 2 then
+        local prize = 7
+
+        balance = balance + prize
+
+        drawMessage(
+            "PAIR WIN! +"
+            .. prize
+        )
+
     else
-        display.center(
-            8,
-            "TRY AGAIN!   "
+        drawMessage(
+            "TRY AGAIN!"
         )
     end
 
+    drawBalance()
     slots.drawButtons()
 end
 
@@ -164,14 +271,15 @@ function slots.open()
         "ROYAL SLOTS"
     )
 
+    drawBalance()
+
     drawReels(
         "[GO]",
         "[DI]",
         "[EM]"
     )
 
-    display.center(
-        8,
+    drawMessage(
         "GOOD LUCK!"
     )
 
