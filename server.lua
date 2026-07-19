@@ -1,6 +1,6 @@
 --================================================--
 -- Casino Royal
--- Version: 4.0.0
+-- Version: 4.1.0
 -- File: server.lua
 -- Description: Central casino network server
 --================================================--
@@ -16,6 +16,9 @@ local machine =
 
 local logger =
     require("core.logger")
+
+local accountStore =
+    require("core.account_store")
 
 --------------------------------------------------
 -- Server state
@@ -55,7 +58,10 @@ local function centerText(
         term.getSize()
 
     text =
-        tostring(text or "")
+        tostring(
+            text
+            or ""
+        )
 
     local x =
         math.floor(
@@ -68,7 +74,9 @@ local function centerText(
     )
 
     if color then
-        term.setTextColor(color)
+        term.setTextColor(
+            color
+        )
     end
 
     term.write(text)
@@ -79,12 +87,16 @@ local function centerText(
 end
 
 --------------------------------------------------
--- Machine status
+-- Time
 --------------------------------------------------
 
 local function getCurrentTime()
     return os.epoch("utc")
 end
+
+--------------------------------------------------
+-- Machine status
+--------------------------------------------------
 
 local function isMachineOnline(info)
     if type(info) ~= "table" then
@@ -118,14 +130,17 @@ local function countMachines()
     for _, info
         in pairs(machines)
     do
-        total = total + 1
+        total =
+            total + 1
 
         if isMachineOnline(info) then
-            online = online + 1
+            online =
+                online + 1
         end
     end
 
-    return total, online
+    return total,
+        online
 end
 
 local function getSortedMachines()
@@ -156,11 +171,15 @@ end
 --------------------------------------------------
 
 local function getStatusColor(status)
-    if status == protocol.STATUS_OFFLINE then
+    if status
+        == protocol.STATUS_OFFLINE
+    then
         return colors.red
     end
 
-    if status == protocol.STATUS_BUSY then
+    if status
+        == protocol.STATUS_BUSY
+    then
         return colors.orange
     end
 
@@ -204,7 +223,9 @@ local function drawMachineLine(info)
         colors.white
     )
 
-    term.write(machineText)
+    term.write(
+        machineText
+    )
 
     local cursorX, cursorY =
         term.getCursorPos()
@@ -227,7 +248,9 @@ local function drawMachineLine(info)
         getStatusColor(status)
     )
 
-    term.write(statusText)
+    term.write(
+        statusText
+    )
 
     term.setTextColor(
         colors.white
@@ -271,7 +294,23 @@ local function drawServerScreen(config)
         .. tostring(config.id)
     )
 
-    term.write("Network:     ")
+    term.write(
+        "Network:     "
+    )
+
+    term.setTextColor(
+        colors.lime
+    )
+
+    print("ONLINE")
+
+    term.setTextColor(
+        colors.white
+    )
+
+    term.write(
+        "Bank:        "
+    )
 
     term.setTextColor(
         colors.lime
@@ -303,7 +342,9 @@ local function drawServerScreen(config)
             colors.lightGray
         )
 
-        print("Waiting for machines...")
+        print(
+            "Waiting for machines..."
+        )
 
         term.setTextColor(
             colors.white
@@ -322,12 +363,16 @@ local function drawServerScreen(config)
         displayed =
             displayed + 1
 
-        if displayed >= DISPLAY_LIMIT then
+        if displayed
+            >= DISPLAY_LIMIT
+        then
             break
         end
     end
 
-    if #machineList > DISPLAY_LIMIT then
+    if #machineList
+        > DISPLAY_LIMIT
+    then
         term.setTextColor(
             colors.lightGray
         )
@@ -358,7 +403,9 @@ local function createMachineId(
     if data.id ~= nil
     and tostring(data.id) ~= ""
     then
-        return tostring(data.id)
+        return tostring(
+            data.id
+        )
     end
 
     return "computer_"
@@ -370,7 +417,8 @@ local function updateMachine(
     data
 )
     data =
-        data or {}
+        data
+        or {}
 
     local machineId =
         createMachineId(
@@ -473,84 +521,101 @@ local function updateMachine(
             getCurrentTime()
     end
 
-    return existing, isNewMachine
+    return existing,
+        isNewMachine
 end
 
---------------------------------------------------
--- Message replies
---------------------------------------------------
-
-local function replyRegister(
-    senderId,
-    info
+local function findMachineByComputerId(
+    senderId
 )
+    for _, info
+        in pairs(machines)
+    do
+        if info.computerId
+            == senderId
+        then
+            return info
+        end
+    end
+
+    return nil
+end
+
+--------------------------------------------------
+-- Reply helpers
+--------------------------------------------------
+
+local function replySuccess(
+    senderId,
+    messageType,
+    data
+)
+    data =
+        data
+        or {}
+
+    data.success =
+        true
+
+    data.result =
+        protocol.SUCCESS
+
+    data.serverId =
+        os.getComputerID()
+
+    data.version =
+        protocol.VERSION
+
+    data.serverTime =
+        getCurrentTime()
+
     network.reply(
         senderId,
-        protocol.REGISTER_ACK,
-        {
-            success = true,
-
-            result =
-                protocol.SUCCESS,
-
-            serverId =
-                os.getComputerID(),
-
-            machineId =
-                info.id,
-
-            version =
-                protocol.VERSION,
-
-            serverTime =
-                getCurrentTime()
-        }
+        messageType,
+        data
     )
 end
 
-local function replyHeartbeat(senderId)
+local function replyError(
+    senderId,
+    messageType,
+    problem,
+    data
+)
+    data =
+        data
+        or {}
+
+    data.success =
+        false
+
+    data.result =
+        protocol.ERROR
+
+    data.error =
+        tostring(
+            problem
+            or "UNKNOWN ERROR"
+        )
+
+    data.serverId =
+        os.getComputerID()
+
+    data.version =
+        protocol.VERSION
+
+    data.serverTime =
+        getCurrentTime()
+
     network.reply(
         senderId,
-        protocol.HEARTBEAT_ACK,
-        {
-            success = true,
-
-            result =
-                protocol.SUCCESS,
-
-            serverId =
-                os.getComputerID(),
-
-            version =
-                protocol.VERSION,
-
-            serverTime =
-                getCurrentTime()
-        }
-    )
-end
-
-local function replyPing(senderId)
-    network.reply(
-        senderId,
-        protocol.PONG,
-        {
-            success = true,
-
-            serverId =
-                os.getComputerID(),
-
-            version =
-                protocol.VERSION,
-
-            serverTime =
-                getCurrentTime()
-        }
+        messageType,
+        data
     )
 end
 
 --------------------------------------------------
--- Message handling
+-- Machine message handlers
 --------------------------------------------------
 
 local function handleRegister(
@@ -563,9 +628,13 @@ local function handleRegister(
             data
         )
 
-    replyRegister(
+    replySuccess(
         senderId,
-        info
+        protocol.REGISTER_ACK,
+        {
+            machineId =
+                info.id
+        }
     )
 end
 
@@ -578,8 +647,384 @@ local function handleHeartbeat(
         data
     )
 
-    replyHeartbeat(senderId)
+    replySuccess(
+        senderId,
+        protocol.HEARTBEAT_ACK
+    )
 end
+
+local function handlePing(senderId)
+    replySuccess(
+        senderId,
+        protocol.PONG
+    )
+end
+
+--------------------------------------------------
+-- Banking helpers
+--------------------------------------------------
+
+local function getRequestUsername(data)
+    if type(data) ~= "table" then
+        return nil
+    end
+
+    if type(data.username) ~= "string"
+    or data.username == ""
+    then
+        return nil
+    end
+
+    return data.username
+end
+
+local function createTransactionDetails(
+    senderId,
+    data
+)
+    local machineInfo =
+        findMachineByComputerId(
+            senderId
+        )
+
+    return {
+        machineId =
+            data.machineId
+            or (
+                machineInfo
+                and machineInfo.id
+            ),
+
+        machineType =
+            data.machineType
+            or (
+                machineInfo
+                and machineInfo.type
+            ),
+
+        game =
+            data.game,
+
+        note =
+            data.note
+    }
+end
+
+--------------------------------------------------
+-- Balance handler
+--------------------------------------------------
+
+local function handleBalance(
+    senderId,
+    data
+)
+    local username =
+        getRequestUsername(data)
+
+    if username == nil then
+        replyError(
+            senderId,
+            protocol.BALANCE_REPLY,
+            "INVALID USERNAME"
+        )
+
+        return
+    end
+
+    local balance, problem =
+        accountStore.getBalance(
+            username
+        )
+
+    if balance == nil then
+        replyError(
+            senderId,
+            protocol.BALANCE_REPLY,
+            problem
+        )
+
+        return
+    end
+
+    replySuccess(
+        senderId,
+        protocol.BALANCE_REPLY,
+        {
+            username =
+                username,
+
+            balance =
+                balance
+        }
+    )
+end
+
+--------------------------------------------------
+-- Deposit handler
+--------------------------------------------------
+
+local function handleDeposit(
+    senderId,
+    data
+)
+    local username =
+        getRequestUsername(data)
+
+    if username == nil then
+        replyError(
+            senderId,
+            protocol.DEPOSIT_REPLY,
+            "INVALID USERNAME"
+        )
+
+        return
+    end
+
+    local success,
+        balance,
+        transaction =
+            accountStore.deposit(
+                username,
+                data.amount,
+                createTransactionDetails(
+                    senderId,
+                    data
+                )
+            )
+
+    if not success then
+        replyError(
+            senderId,
+            protocol.DEPOSIT_REPLY,
+            balance
+        )
+
+        return
+    end
+
+    logger.info(
+        "Deposit: "
+        .. username
+        .. " +"
+        .. tostring(data.amount)
+        .. " = "
+        .. tostring(balance)
+    )
+
+    replySuccess(
+        senderId,
+        protocol.DEPOSIT_REPLY,
+        {
+            username =
+                username,
+
+            amount =
+                data.amount,
+
+            balance =
+                balance,
+
+            transaction =
+                transaction
+        }
+    )
+end
+
+--------------------------------------------------
+-- Withdrawal handler
+--------------------------------------------------
+
+local function handleWithdraw(
+    senderId,
+    data
+)
+    local username =
+        getRequestUsername(data)
+
+    if username == nil then
+        replyError(
+            senderId,
+            protocol.WITHDRAW_REPLY,
+            "INVALID USERNAME"
+        )
+
+        return
+    end
+
+    local success,
+        result,
+        extra =
+            accountStore.withdraw(
+                username,
+                data.amount,
+                createTransactionDetails(
+                    senderId,
+                    data
+                )
+            )
+
+    if not success then
+        replyError(
+            senderId,
+            protocol.WITHDRAW_REPLY,
+            result,
+            {
+                username =
+                    username,
+
+                balance =
+                    extra
+            }
+        )
+
+        return
+    end
+
+    local balance =
+        result
+
+    local transaction =
+        extra
+
+    logger.info(
+        "Withdrawal: "
+        .. username
+        .. " -"
+        .. tostring(data.amount)
+        .. " = "
+        .. tostring(balance)
+    )
+
+    replySuccess(
+        senderId,
+        protocol.WITHDRAW_REPLY,
+        {
+            username =
+                username,
+
+            amount =
+                data.amount,
+
+            balance =
+                balance,
+
+            transaction =
+                transaction
+        }
+    )
+end
+
+--------------------------------------------------
+-- Account handler
+--------------------------------------------------
+
+local function handleAccount(
+    senderId,
+    data
+)
+    local username =
+        getRequestUsername(data)
+
+    if username == nil then
+        replyError(
+            senderId,
+            protocol.ACCOUNT_REPLY,
+            "INVALID USERNAME"
+        )
+
+        return
+    end
+
+    local account, problem =
+        accountStore.getAccount(
+            username
+        )
+
+    if account == nil then
+        replyError(
+            senderId,
+            protocol.ACCOUNT_REPLY,
+            problem
+        )
+
+        return
+    end
+
+    replySuccess(
+        senderId,
+        protocol.ACCOUNT_REPLY,
+        {
+            account =
+                account
+        }
+    )
+end
+
+--------------------------------------------------
+-- Game-stat handler
+--------------------------------------------------
+
+local function handleRecordGame(
+    senderId,
+    data
+)
+    local username =
+        getRequestUsername(data)
+
+    if username == nil then
+        replyError(
+            senderId,
+            protocol.RECORD_GAME_REPLY,
+            "INVALID USERNAME"
+        )
+
+        return
+    end
+
+    if type(data.game) ~= "string"
+    or data.game == ""
+    then
+        replyError(
+            senderId,
+            protocol.RECORD_GAME_REPLY,
+            "INVALID GAME"
+        )
+
+        return
+    end
+
+    local success, problem =
+        accountStore.recordGame(
+            username,
+            data.game
+        )
+
+    if not success then
+        replyError(
+            senderId,
+            protocol.RECORD_GAME_REPLY,
+            problem
+        )
+
+        return
+    end
+
+    replySuccess(
+        senderId,
+        protocol.RECORD_GAME_REPLY,
+        {
+            username =
+                username,
+
+            game =
+                data.game
+        }
+    )
+end
+
+--------------------------------------------------
+-- Main message handler
+--------------------------------------------------
 
 local function handleMessage(
     senderId,
@@ -626,7 +1071,64 @@ local function handleMessage(
     if message.type
         == protocol.PING
     then
-        replyPing(senderId)
+        handlePing(
+            senderId
+        )
+
+        return
+    end
+
+    if message.type
+        == protocol.BALANCE
+    then
+        handleBalance(
+            senderId,
+            data
+        )
+
+        return
+    end
+
+    if message.type
+        == protocol.DEPOSIT
+    then
+        handleDeposit(
+            senderId,
+            data
+        )
+
+        return
+    end
+
+    if message.type
+        == protocol.WITHDRAW
+    then
+        handleWithdraw(
+            senderId,
+            data
+        )
+
+        return
+    end
+
+    if message.type
+        == protocol.ACCOUNT
+    then
+        handleAccount(
+            senderId,
+            data
+        )
+
+        return
+    end
+
+    if message.type
+        == protocol.RECORD_GAME
+    then
+        handleRecordGame(
+            senderId,
+            data
+        )
 
         return
     end
@@ -640,7 +1142,7 @@ local function handleMessage(
 end
 
 --------------------------------------------------
--- Network receiver loop
+-- Network receiver
 --------------------------------------------------
 
 local function receiverLoop()
@@ -669,7 +1171,7 @@ local function receiverLoop()
 end
 
 --------------------------------------------------
--- Display refresh loop
+-- Display refresh
 --------------------------------------------------
 
 local function displayLoop(config)
@@ -702,6 +1204,17 @@ local function runServer()
         )
     end
 
+    local initialized,
+        initializeProblem =
+            accountStore.initialize()
+
+    if not initialized then
+        error(
+            initializeProblem
+            or "Could not initialize account storage"
+        )
+    end
+
     local opened, openProblem =
         network.open()
 
@@ -727,11 +1240,14 @@ local function runServer()
         .. protocol.VERSION
     )
 
+    logger.info(
+        "Central bank online"
+    )
+
     parallel.waitForAll(
         function()
             receiverLoop()
         end,
-
         function()
             displayLoop(config)
         end
