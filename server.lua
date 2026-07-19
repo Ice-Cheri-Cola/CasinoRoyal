@@ -1,12 +1,15 @@
 --================================================--
 -- Casino Royal
--- Version: 3.1.0
+-- Version: 4.0.0
 -- File: server.lua
 -- Description: Central casino network server
 --================================================--
 
 local network =
     require("core.network")
+
+local protocol =
+    require("core.protocol")
 
 local machine =
     require("core.machine")
@@ -20,8 +23,11 @@ local logger =
 
 local machines = {}
 
-local heartbeatTimeout =
+local HEARTBEAT_TIMEOUT =
     15000
+
+local DISPLAY_LIMIT =
+    8
 
 --------------------------------------------------
 -- Terminal helpers
@@ -40,7 +46,11 @@ local function clearScreen()
     term.setCursorPos(1, 1)
 end
 
-local function centerText(y, text, color)
+local function centerText(
+    y,
+    text,
+    color
+)
     local width =
         term.getSize()
 
@@ -72,12 +82,33 @@ end
 -- Machine status
 --------------------------------------------------
 
-local function isMachineOnline(info)
-    local now =
-        os.epoch("utc")
+local function getCurrentTime()
+    return os.epoch("utc")
+end
 
-    return now - info.lastSeen
-        <= heartbeatTimeout
+local function isMachineOnline(info)
+    if type(info) ~= "table" then
+        return false
+    end
+
+    if type(info.lastSeen) ~= "number" then
+        return false
+    end
+
+    return getCurrentTime()
+        - info.lastSeen
+        <= HEARTBEAT_TIMEOUT
+end
+
+local function getMachineStatus(info)
+    if not isMachineOnline(info) then
+        return protocol.STATUS_OFFLINE
+    end
+
+    return tostring(
+        info.status
+        or protocol.STATUS_IDLE
+    )
 end
 
 local function countMachines()
@@ -97,9 +128,113 @@ local function countMachines()
     return total, online
 end
 
+local function getSortedMachines()
+    local list = {}
+
+    for _, info
+        in pairs(machines)
+    do
+        table.insert(
+            list,
+            info
+        )
+    end
+
+    table.sort(
+        list,
+        function(first, second)
+            return tostring(first.name)
+                < tostring(second.name)
+        end
+    )
+
+    return list
+end
+
 --------------------------------------------------
 -- Server display
 --------------------------------------------------
+
+local function getStatusColor(status)
+    if status == protocol.STATUS_OFFLINE then
+        return colors.red
+    end
+
+    if status == protocol.STATUS_BUSY then
+        return colors.orange
+    end
+
+    return colors.lime
+end
+
+local function drawMachineLine(info)
+    local width =
+        term.getSize()
+
+    local status =
+        getMachineStatus(info)
+
+    local statusText =
+        string.upper(status)
+
+    local machineText =
+        tostring(info.name)
+        .. " ["
+        .. tostring(info.type)
+        .. "]"
+
+    local availableWidth =
+        width
+        - #statusText
+        - 1
+
+    if #machineText > availableWidth then
+        machineText =
+            string.sub(
+                machineText,
+                1,
+                math.max(
+                    1,
+                    availableWidth
+                )
+            )
+    end
+
+    term.setTextColor(
+        colors.white
+    )
+
+    term.write(machineText)
+
+    local cursorX, cursorY =
+        term.getCursorPos()
+
+    local statusX =
+        width
+        - #statusText
+        + 1
+
+    if cursorX < statusX then
+        term.setCursorPos(
+            statusX,
+            cursorY
+        )
+    else
+        term.write(" ")
+    end
+
+    term.setTextColor(
+        getStatusColor(status)
+    )
+
+    term.write(statusText)
+
+    term.setTextColor(
+        colors.white
+    )
+
+    print()
+end
 
 local function drawServerScreen(config)
     clearScreen()
@@ -112,7 +247,7 @@ local function drawServerScreen(config)
 
     centerText(
         2,
-        config.name,
+        tostring(config.name),
         colors.cyan
     )
 
@@ -122,17 +257,30 @@ local function drawServerScreen(config)
     term.setCursorPos(1, 4)
 
     print(
+        "Version:     "
+        .. protocol.VERSION
+    )
+
+    print(
         "Computer ID: "
         .. os.getComputerID()
     )
 
     print(
         "Machine ID:  "
-        .. config.id
+        .. tostring(config.id)
     )
 
-    print(
-        "Network:     ONLINE"
+    term.write("Network:     ")
+
+    term.setTextColor(
+        colors.lime
+    )
+
+    print("ONLINE")
+
+    term.setTextColor(
+        colors.white
     )
 
     print(
@@ -147,55 +295,96 @@ local function drawServerScreen(config)
     print("Registered machines:")
     print("--------------------")
 
+    local machineList =
+        getSortedMachines()
+
+    if #machineList == 0 then
+        term.setTextColor(
+            colors.lightGray
+        )
+
+        print("Waiting for machines...")
+
+        term.setTextColor(
+            colors.white
+        )
+
+        return
+    end
+
     local displayed = 0
 
     for _, info
-        in pairs(machines)
+        in ipairs(machineList)
     do
-        displayed = displayed + 1
+        drawMachineLine(info)
 
-        local status =
-            isMachineOnline(info)
-            and "ONLINE"
-            or "OFFLINE"
+        displayed =
+            displayed + 1
 
-        print(
-            info.name
-            .. " ["
-            .. info.type
-            .. "] "
-            .. status
-        )
-
-        if displayed >= 8 then
+        if displayed >= DISPLAY_LIMIT then
             break
         end
     end
 
-    if displayed == 0 then
-        print("Waiting for machines...")
+    if #machineList > DISPLAY_LIMIT then
+        term.setTextColor(
+            colors.lightGray
+        )
+
+        print(
+            "+"
+            .. (
+                #machineList
+                - DISPLAY_LIMIT
+            )
+            .. " more"
+        )
+
+        term.setTextColor(
+            colors.white
+        )
     end
 end
 
 --------------------------------------------------
--- Register or update machine
+-- Machine registration
 --------------------------------------------------
+
+local function createMachineId(
+    senderId,
+    data
+)
+    if data.id ~= nil
+    and tostring(data.id) ~= ""
+    then
+        return tostring(data.id)
+    end
+
+    return "computer_"
+        .. tostring(senderId)
+end
 
 local function updateMachine(
     senderId,
     data
 )
+    data =
+        data or {}
+
     local machineId =
-        tostring(
-            data.id
-            or "computer_"
-            .. senderId
+        createMachineId(
+            senderId,
+            data
         )
 
     local existing =
         machines[machineId]
 
-    if existing == nil then
+    local isNewMachine =
+        existing == nil
+
+    if isNewMachine then
         existing = {
             computerId =
                 senderId,
@@ -218,14 +407,23 @@ local function updateMachine(
             status =
                 tostring(
                     data.status
-                    or "idle"
+                    or protocol.STATUS_IDLE
                 ),
 
             player =
                 data.player,
 
+            version =
+                tostring(
+                    data.version
+                    or "unknown"
+                ),
+
+            registeredAt =
+                getCurrentTime(),
+
             lastSeen =
-                os.epoch("utc")
+                getCurrentTime()
         }
 
         machines[machineId] =
@@ -234,6 +432,9 @@ local function updateMachine(
         logger.info(
             "Machine registered: "
             .. existing.name
+            .. " ["
+            .. existing.type
+            .. "]"
         )
     else
         existing.computerId =
@@ -255,79 +456,187 @@ local function updateMachine(
             tostring(
                 data.status
                 or existing.status
+                or protocol.STATUS_IDLE
             )
 
         existing.player =
             data.player
 
+        existing.version =
+            tostring(
+                data.version
+                or existing.version
+                or "unknown"
+            )
+
         existing.lastSeen =
-            os.epoch("utc")
+            getCurrentTime()
     end
 
-    return existing
+    return existing, isNewMachine
+end
+
+--------------------------------------------------
+-- Message replies
+--------------------------------------------------
+
+local function replyRegister(
+    senderId,
+    info
+)
+    network.reply(
+        senderId,
+        protocol.REGISTER_ACK,
+        {
+            success = true,
+
+            result =
+                protocol.SUCCESS,
+
+            serverId =
+                os.getComputerID(),
+
+            machineId =
+                info.id,
+
+            version =
+                protocol.VERSION,
+
+            serverTime =
+                getCurrentTime()
+        }
+    )
+end
+
+local function replyHeartbeat(senderId)
+    network.reply(
+        senderId,
+        protocol.HEARTBEAT_ACK,
+        {
+            success = true,
+
+            result =
+                protocol.SUCCESS,
+
+            serverId =
+                os.getComputerID(),
+
+            version =
+                protocol.VERSION,
+
+            serverTime =
+                getCurrentTime()
+        }
+    )
+end
+
+local function replyPing(senderId)
+    network.reply(
+        senderId,
+        protocol.PONG,
+        {
+            success = true,
+
+            serverId =
+                os.getComputerID(),
+
+            version =
+                protocol.VERSION,
+
+            serverTime =
+                getCurrentTime()
+        }
+    )
 end
 
 --------------------------------------------------
 -- Message handling
 --------------------------------------------------
 
-local function handleMessage(
+local function handleRegister(
     senderId,
-    message
+    data
 )
-    local data =
-        message.data
-        or {}
-
-    if message.type == "register" then
-        local info =
-            updateMachine(
-                senderId,
-                data
-            )
-
-        network.reply(
-            senderId,
-            "register_ack",
-            {
-                success = true,
-                serverId =
-                    os.getComputerID(),
-
-                machineId =
-                    info.id
-            }
-        )
-
-    elseif message.type == "heartbeat" then
+    local info =
         updateMachine(
             senderId,
             data
         )
 
-        network.reply(
-            senderId,
-            "heartbeat_ack",
-            {
-                success = true,
-                serverTime =
-                    os.epoch("utc")
-            }
+    replyRegister(
+        senderId,
+        info
+    )
+end
+
+local function handleHeartbeat(
+    senderId,
+    data
+)
+    updateMachine(
+        senderId,
+        data
+    )
+
+    replyHeartbeat(senderId)
+end
+
+local function handleMessage(
+    senderId,
+    message
+)
+    if not network.isValidMessage(
+        message
+    )
+    then
+        logger.warning(
+            "Invalid message from computer "
+            .. tostring(senderId)
         )
 
-    elseif message.type == "ping" then
-        network.reply(
-            senderId,
-            "pong",
-            {
-                serverId =
-                    os.getComputerID(),
-
-                serverTime =
-                    os.epoch("utc")
-            }
-        )
+        return
     end
+
+    local data =
+        message.data
+        or {}
+
+    if message.type
+        == protocol.REGISTER
+    then
+        handleRegister(
+            senderId,
+            data
+        )
+
+        return
+    end
+
+    if message.type
+        == protocol.HEARTBEAT
+    then
+        handleHeartbeat(
+            senderId,
+            data
+        )
+
+        return
+    end
+
+    if message.type
+        == protocol.PING
+    then
+        replyPing(senderId)
+
+        return
+    end
+
+    logger.warning(
+        "Unknown message type: "
+        .. tostring(message.type)
+        .. " from computer "
+        .. tostring(senderId)
+    )
 end
 
 --------------------------------------------------
@@ -339,13 +648,22 @@ local function receiverLoop()
         local senderId, message =
             network.receive(1)
 
-        if senderId
-        and message
+        if senderId ~= nil
+        and message ~= nil
         then
-            handleMessage(
-                senderId,
-                message
-            )
+            local success, problem =
+                pcall(
+                    handleMessage,
+                    senderId,
+                    message
+                )
+
+            if not success then
+                logger.error(
+                    "Message handling failed: "
+                    .. tostring(problem)
+                )
+            end
         end
     end
 end
@@ -388,18 +706,25 @@ local function runServer()
         network.open()
 
     if not opened then
-        error(openProblem)
+        error(
+            openProblem
+            or "Could not open casino network"
+        )
     end
 
     local hosted, hostProblem =
         network.hostServer()
 
     if not hosted then
-        error(hostProblem)
+        error(
+            hostProblem
+            or "Could not host casino server"
+        )
     end
 
     logger.info(
-        "Casino server online"
+        "Casino server online - Version "
+        .. protocol.VERSION
     )
 
     parallel.waitForAll(
@@ -421,6 +746,7 @@ local success, problem =
     pcall(runServer)
 
 network.unhostServer()
+network.close()
 
 if not success then
     clearScreen()
@@ -432,7 +758,10 @@ if not success then
     )
 
     term.setCursorPos(1, 5)
-    print(tostring(problem))
+
+    print(
+        tostring(problem)
+    )
 
     logger.error(
         tostring(problem)
