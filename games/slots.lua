@@ -15,7 +15,7 @@ local slots = {}
 
 function slots.open()
 
-    ui.clearButtons()
+    ui.clearButton()
     
     display.clear()
 
