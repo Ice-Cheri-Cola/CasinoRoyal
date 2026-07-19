@@ -74,12 +74,12 @@ local function drawBalance()
     clearLine(3)
 
     display.center(
-        3,
-        "CREDITS: "
-        .. balance
-        .. "   COST: "
-        .. spinCost
-    )
+    3,
+    "$"
+    .. balance
+    .. "   -$"
+    .. spinCost
+)
 end
 
 --------------------------------------------------
