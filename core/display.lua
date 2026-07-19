@@ -1,188 +1,132 @@
 --================================================--
 -- Casino Royal
--- Version: 0.1.0
+-- Version: 0.5.5
 -- File: core/display.lua
 -- Description: Monitor drawing engine
 --================================================--
 
 local display = {}
-
-local theme =  require("core.theme")
+local theme = require("core.theme")
 
 local monitor = nil
+local monitorName = "top"
 
+--------------------------------------------------
+-- Get or reconnect monitor
+--------------------------------------------------
+
+local function getMonitor()
+    if monitor == nil then
+        monitor = peripheral.wrap(monitorName)
+    end
+
+    if monitor == nil then
+        error(
+            "Monitor not found: "
+            .. tostring(monitorName)
+        )
+    end
+
+    return monitor
+end
 
 --------------------------------------------------
 -- Initialize monitor
 --------------------------------------------------
 
 function display.init(name)
-
-    monitor = peripheral.wrap(name)
+    monitorName = name or "top"
+    monitor = peripheral.wrap(monitorName)
 
     if monitor == nil then
         error(
-            "Monitor not found: " 
-            .. tostring(name)
+            "Monitor not found: "
+            .. tostring(monitorName)
         )
     end
 
-
     monitor.setTextScale(1)
-
     display.clear()
-
 end
-
-
 
 --------------------------------------------------
 -- Clear screen
 --------------------------------------------------
 
 function display.clear()
+    local screen = getMonitor()
 
-    if monitor then
+    screen.setBackgroundColor(
+        theme.get().background
+    )
 
-        monitor.setBackgroundColor(
-            theme.get().background
-        )
-
-        monitor.setTextColor(
-            colors.white
-        )
-
-        monitor.clear()
-
-    end
-
+    screen.setTextColor(colors.white)
+    screen.clear()
 end
-
-
 
 --------------------------------------------------
 -- Get screen size
 --------------------------------------------------
 
 function display.size()
-
-    if monitor then
-        return monitor.getSize()
-    end
-
-    return 0,0
-
+    local screen = getMonitor()
+    return screen.getSize()
 end
-
-
 
 --------------------------------------------------
 -- Center text
 --------------------------------------------------
 
-function display.center(
-    y,
-    text,
-    color
-)
+function display.center(y, text, color)
+    local screen = getMonitor()
+    local width = screen.getSize()
 
-    if not monitor then
-        return
-    end
-
-
-    local width =
-        monitor.getSize()
-
-
-    local x =
-        math.floor(
-            (width - #text) / 2
-        )
-
-
-    monitor.setCursorPos(
-        x + 1,
-        y
+    local x = math.floor(
+        (width - #text) / 2
     )
 
+    screen.setCursorPos(x + 1, y)
 
     if color then
-        monitor.setTextColor(color)
+        screen.setTextColor(color)
     end
 
-
-    monitor.write(text)
-
+    screen.write(text)
 end
-
-
 
 --------------------------------------------------
 -- Draw title
 --------------------------------------------------
 
 function display.title(text)
-
-    local width,height =
-        display.size()
-
-
     display.center(
         2,
-        "♛ " .. text .. " ♛",
+        "* " .. text .. " *",
         theme.get().primary
     )
-
-
 end
-
-
 
 --------------------------------------------------
 -- Draw border
 --------------------------------------------------
 
 function display.border()
+    local screen = getMonitor()
+    local width, height = screen.getSize()
 
-    local width,height =
-        display.size()
-
-
-    monitor.setTextColor(
-       theme.get().secondary
+    screen.setTextColor(
+        theme.get().secondary
     )
 
-
-    monitor.setCursorPos(
-        1,
-        1
+    screen.setCursorPos(1, 1)
+    screen.write(
+        string.rep("=", width)
     )
 
-
-    monitor.write(
-        string.rep(
-            "=",
-            width
-        )
+    screen.setCursorPos(1, height)
+    screen.write(
+        string.rep("=", width)
     )
-
-
-    monitor.setCursorPos(
-        1,
-        height
-    )
-
-
-    monitor.write(
-        string.rep(
-            "=",
-            width
-        )
-    )
-
 end
-
-
 
 return display
