@@ -1,6 +1,6 @@
 --================================================--
 -- Casino Royal
--- Version: 4.2.1
+-- Version: 4.3.0
 -- File: update.lua
 -- Description: Downloads all Casino Royal files
 --================================================--
@@ -15,10 +15,12 @@ local FILES = {
     "setup.lua",
     "server.lua",
     "atm.lua",
+    "admin.lua",
     "config.lua",
 
     "core/account_store.lua",
     "core/bank.lua",
+    "core/card.lua",
     "core/display.lua",
     "core/hardware.lua",
     "core/logger.lua",
@@ -104,7 +106,7 @@ local function drawHeader()
     print("==============================")
     print("       CASINO ROYAL")
     print("          UPDATER")
-    print("       VERSION 4.2.1")
+    print("       VERSION 4.3.0")
     print("==============================")
     print("")
 end
