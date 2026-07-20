@@ -1,32 +1,21 @@
 --================================================--
 -- Casino Royal
--- Version: 4.1.0
+-- Version: 4.2.1
 -- File: update.lua
 -- Description: Downloads all Casino Royal files
 --================================================--
-
---------------------------------------------------
--- Constants
---------------------------------------------------
 
 local BASE_URL =
     "https://raw.githubusercontent.com/"
     .. "Ice-Cheri-Cola/CasinoRoyal/main/"
 
 local FILES = {
-    --------------------------------------------------
-    -- Main programs
-    --------------------------------------------------
-
     "startup.lua",
     "casino.lua",
     "setup.lua",
     "server.lua",
+    "atm.lua",
     "config.lua",
-
-    --------------------------------------------------
-    -- Core modules
-    --------------------------------------------------
 
     "core/account_store.lua",
     "core/bank.lua",
@@ -40,44 +29,20 @@ local FILES = {
     "core/theme.lua",
     "core/ui.lua",
 
-    --------------------------------------------------
-    -- Assets
-    --------------------------------------------------
-
     "assets/themes.lua",
-
-    --------------------------------------------------
-    -- Games
-    --------------------------------------------------
 
     "games/menu.lua",
     "games/slots.lua",
 
-    --------------------------------------------------
-    -- Replace updater last
-    --------------------------------------------------
-
     "update.lua"
 }
 
---------------------------------------------------
--- Private: Create parent directory
---------------------------------------------------
-
 local function createParentDirectory(path)
-    local directory =
-        fs.getDir(path)
-
-    if directory ~= ""
-    and not fs.exists(directory)
-    then
+    local directory = fs.getDir(path)
+    if directory ~= "" and not fs.exists(directory) then
         fs.makeDir(directory)
     end
 end
-
---------------------------------------------------
--- Private: Remove temporary file
---------------------------------------------------
 
 local function removeTemporaryFile(path)
     if fs.exists(path) then
@@ -85,73 +50,36 @@ local function removeTemporaryFile(path)
     end
 end
 
---------------------------------------------------
--- Private: Download one file
---------------------------------------------------
-
 local function downloadFile(path)
     createParentDirectory(path)
 
-    local url =
-        BASE_URL .. path
+    local url = BASE_URL .. path
+    local temporaryPath = path .. ".download"
 
-    local temporaryPath =
-        path .. ".download"
+    removeTemporaryFile(temporaryPath)
 
-    removeTemporaryFile(
-        temporaryPath
-    )
+    write("Updating " .. path .. "... ")
 
-    write(
-        "Updating "
-        .. path
-        .. "... "
-    )
-
-    local response, errorMessage =
-        http.get(url)
-
+    local response, errorMessage = http.get(url)
     if not response then
         print("FAILED")
-
-        print(
-            "  "
-            .. tostring(
-                errorMessage
-                or "Unknown HTTP error"
-            )
-        )
-
+        print("  " .. tostring(errorMessage or "Unknown HTTP error"))
         return false
     end
 
-    local content =
-        response.readAll()
-
+    local content = response.readAll()
     response.close()
 
-    if content == nil
-    or content == ""
-    then
+    if content == nil or content == "" then
         print("FAILED")
         print("  Download was empty")
-
         return false
     end
 
-    local file =
-        fs.open(
-            temporaryPath,
-            "w"
-        )
-
+    local file = fs.open(temporaryPath, "w")
     if not file then
         print("FAILED")
-
-        print(
-            "  Could not open temporary file"
-        )
-
+        print("  Could not open temporary file")
         return false
     end
 
@@ -162,48 +90,26 @@ local function downloadFile(path)
         fs.delete(path)
     end
 
-    fs.move(
-        temporaryPath,
-        path
-    )
-
+    fs.move(temporaryPath, path)
     print("OK")
-
     return true
 end
 
---------------------------------------------------
--- Private: Draw updater header
---------------------------------------------------
-
 local function drawHeader()
-    term.setBackgroundColor(
-        colors.black
-    )
-
-    term.setTextColor(
-        colors.white
-    )
-
+    term.setBackgroundColor(colors.black)
+    term.setTextColor(colors.white)
     term.clear()
     term.setCursorPos(1, 1)
 
     print("==============================")
     print("       CASINO ROYAL")
     print("          UPDATER")
-    print("       VERSION 4.1.0")
+    print("       VERSION 4.2.1")
     print("==============================")
     print("")
 end
 
---------------------------------------------------
--- Private: Draw results
---------------------------------------------------
-
-local function drawResults(
-    updated,
-    failed
-)
+local function drawResults(updated, failed)
     print("")
     print("==============================")
     print("Update finished")
@@ -212,83 +118,42 @@ local function drawResults(
     print("==============================")
 end
 
---------------------------------------------------
--- Main
---------------------------------------------------
-
 local function main()
     drawHeader()
 
     local updated = 0
     local failed = 0
 
-    for _, path
-        in ipairs(FILES)
-    do
+    for _, path in ipairs(FILES) do
         if downloadFile(path) then
-            updated =
-                updated + 1
+            updated = updated + 1
         else
-            failed =
-                failed + 1
+            failed = failed + 1
         end
     end
 
-    drawResults(
-        updated,
-        failed
-    )
+    drawResults(updated, failed)
 
     if failed == 0 then
         print("")
-        print(
-            "Machine configuration preserved."
-        )
-
-        print(
-            "Player data and logs preserved."
-        )
-
-        print(
-            "Rebooting in 2 seconds..."
-        )
-
+        print("Machine configuration preserved.")
+        print("Player data and logs preserved.")
+        print("Rebooting in 2 seconds...")
         sleep(2)
         os.reboot()
     end
 
     print("")
-    print(
-        "Some files could not be updated."
-    )
-
-    print(
-        "The computer will not reboot."
-    )
+    print("Some files could not be updated.")
+    print("The computer will not reboot.")
 end
 
---------------------------------------------------
--- Safe start
---------------------------------------------------
-
-local ok, problem =
-    pcall(main)
+local ok, problem = pcall(main)
 
 if not ok then
-    term.setTextColor(
-        colors.red
-    )
-
+    term.setTextColor(colors.red)
     print("")
-    print(
-        "Updater crashed:"
-    )
-
-    print(
-        tostring(problem)
-    )
-
-    term.setTextColor(
-        colors.white
-    )
+    print("Updater crashed:")
+    print(tostring(problem))
+    term.setTextColor(colors.white)
 end
