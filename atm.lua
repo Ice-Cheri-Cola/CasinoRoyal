@@ -1,14 +1,15 @@
 --================================================--
 -- Casino Royal
--- Version: 4.2.2
+-- Version: 4.3.0
 -- File: atm.lua
--- Description: Diamond deposit and withdrawal ATM
+-- Description: Networked diamond ATM with bank cards
 --================================================--
 
 local player = require("core.player")
 local bank = require("core.bank")
 local machine = require("core.machine")
 local protocol = require("core.protocol")
+local card = require("core.card")
 
 local monitor = peripheral.wrap("top")
 local depositChest = peripheral.wrap("front")
@@ -29,34 +30,13 @@ if not vaultChest then error("Vault chest not found on back") end
 player.setRange(2)
 monitor.setTextScale(0.5)
 
-local message = "Insert bank card or stand near ATM"
+local message = "Insert card or stand near ATM"
 local busy = false
-local depositY = 8
-local withdrawY = 10
-local logoutY = nil
-local statusY = 12
-
-local function updateLayout()
-    local _, height = monitor.getSize()
-    statusY = height
-    withdrawY = math.max(7, height - 2)
-    depositY = math.max(5, withdrawY - 2)
-    logoutY = nil
-
-    if height >= 15 then
-        logoutY = height - 2
-        withdrawY = height - 4
-        depositY = height - 6
-    end
-end
+local activeCardId = nil
 
 local function center(y, text, textColor, backgroundColor)
-    local width, height = monitor.getSize()
-    if y < 1 or y > height then return end
-
+    local width = monitor.getSize()
     text = tostring(text or "")
-    if #text > width then text = text:sub(1, width) end
-
     monitor.setBackgroundColor(backgroundColor or colors.black)
     monitor.setTextColor(textColor or colors.white)
     monitor.setCursorPos(math.max(1, math.floor((width - #text) / 2) + 1), y)
@@ -64,9 +44,7 @@ local function center(y, text, textColor, backgroundColor)
 end
 
 local function fillLine(y, backgroundColor)
-    local width, height = monitor.getSize()
-    if y < 1 or y > height then return end
-
+    local width = monitor.getSize()
     monitor.setBackgroundColor(backgroundColor or colors.black)
     monitor.setCursorPos(1, y)
     monitor.write(string.rep(" ", width))
@@ -80,7 +58,9 @@ end
 local function countDiamonds(inventory)
     local total = 0
     for _, item in pairs(inventory.list()) do
-        if item.name == DIAMOND then total = total + item.count end
+        if item.name == DIAMOND then
+            total = total + item.count
+        end
     end
     return total
 end
@@ -117,7 +97,7 @@ local function getItemDisplayName(slot, summary)
     return summary.displayName or summary.name
 end
 
-local function parseCardUsername(displayName)
+local function parseNamedCardUsername(displayName)
     if type(displayName) ~= "string" then return nil end
 
     for _, prefix in ipairs(CARD_PREFIXES) do
@@ -130,26 +110,47 @@ local function parseCardUsername(displayName)
     return nil
 end
 
-local function readBankCard()
+local function readNamedCard()
     for slot, item in pairs(depositChest.list()) do
         if item.name ~= DIAMOND then
-            local username = parseCardUsername(getItemDisplayName(slot, item))
-            if username then return username, slot end
+            local username = parseNamedCardUsername(
+                getItemDisplayName(slot, item)
+            )
+
+            if username then
+                return {
+                    username = username,
+                    id = "named:" .. username,
+                    kind = "named_item"
+                }
+            end
         end
     end
 
     return nil
 end
 
-local function syncMachineState()
+local function readAnyBankCard()
+    local diskCard = card.read()
+    if diskCard then
+        diskCard.kind = "disk"
+        return diskCard
+    end
+
+    return readNamedCard()
+end
+
+local function setRuntimeStatus()
     machine.setPlayer(player.getName())
     machine.setStatus(busy and protocol.STATUS_BUSY or protocol.STATUS_IDLE)
 end
 
 local function draw()
-    updateLayout()
     monitor.setBackgroundColor(colors.black)
     monitor.clear()
+
+    local _, height = monitor.getSize()
+    local compact = height < 15
 
     center(1, "CASINO ROYAL", colors.yellow)
     center(2, "DIAMOND ATM", colors.cyan)
@@ -160,50 +161,63 @@ local function draw()
         center(4, username, colors.white)
         center(5, "Balance: " .. tostring(bank.getBalance()), colors.lime)
         center(6, "1 diamond = 10 credits", colors.lightGray)
-        drawButton(depositY, "DEPOSIT ALL", colors.green)
-        drawButton(withdrawY, "WITHDRAW 1", colors.blue)
-        if logoutY then drawButton(logoutY, "LOG OUT", colors.red) end
+
+        if compact then
+            drawButton(8, "DEPOSIT ALL", colors.green)
+            drawButton(10, "WITHDRAW 1", colors.blue)
+            center(12, message, busy and colors.yellow or colors.white)
+        else
+            center(7, "Login: " .. tostring(player.getLoginMethod() or "unknown"), colors.lightGray)
+            drawButton(9, "DEPOSIT ALL", colors.green)
+            drawButton(11, "WITHDRAW 1", colors.blue)
+            drawButton(13, "LOG OUT", colors.red)
+            center(15, message, busy and colors.yellow or colors.white)
+        end
     else
         center(5, "INSERT BANK CARD", colors.orange)
-        center(6, "OR STAND WITHIN 2 BLOCKS", colors.lightGray)
+        center(6, "Disk drive or named item", colors.lightGray)
+        center(8, "OR STAND WITHIN 2 BLOCKS", colors.orange)
+        center(math.min(height, 12), message, colors.white)
     end
-
-    fillLine(statusY, colors.black)
-    center(statusY, message, busy and colors.yellow or colors.white)
 end
 
-local function loadAccount(username, method)
+local function loadAccount(username, method, cardId)
     local ok, result
 
     if method == "card" then
         ok, result = player.loginAs(username)
+        activeCardId = cardId
     else
         player.logout()
+        activeCardId = nil
         ok, result = player.login()
     end
 
     if not ok then
         message = result or "Login failed"
-        syncMachineState()
         return false
     end
 
     local loaded, problem = bank.loadPlayer()
     if not loaded then
         player.logout()
+        activeCardId = nil
         message = problem or "Bank offline"
-        syncMachineState()
         return false
     end
 
     message = method == "card" and "Bank card accepted" or "Account loaded"
-    syncMachineState()
+    setRuntimeStatus()
     return true
 end
 
 local function loginPlayer()
-    local cardUsername = readBankCard()
-    if cardUsername then return loadAccount(cardUsername, "card") end
+    local cardData = readAnyBankCard()
+
+    if cardData then
+        return loadAccount(cardData.username, "card", cardData.id)
+    end
+
     return loadAccount(nil, "detector")
 end
 
@@ -211,30 +225,36 @@ local function depositAll()
     if busy or not player.isLoggedIn() then return end
 
     busy = true
-    syncMachineState()
+    setRuntimeStatus()
     message = "Processing deposit..."
     draw()
 
     local available = countDiamonds(depositChest)
+
     if available <= 0 then
         message = "Put diamonds in front chest"
         busy = false
-        syncMachineState()
+        setRuntimeStatus()
         draw()
         return
     end
 
     local moved = moveDiamonds(depositChest, "back", available)
+
     if moved <= 0 then
         message = "Vault is full"
         busy = false
-        syncMachineState()
+        setRuntimeStatus()
         draw()
         return
     end
 
     local credits = moved * CREDITS_PER_DIAMOND
-    local paid, problem = bank.add(credits, "atm", "Diamond deposit")
+    local paid, problem = bank.add(
+        credits,
+        "atm",
+        "Diamond deposit"
+    )
 
     if not paid then
         moveDiamonds(vaultChest, "front", moved)
@@ -244,7 +264,7 @@ local function depositAll()
     end
 
     busy = false
-    syncMachineState()
+    setRuntimeStatus()
     draw()
 end
 
@@ -252,15 +272,16 @@ local function withdrawOne()
     if busy or not player.isLoggedIn() then return end
 
     busy = true
-    syncMachineState()
+    setRuntimeStatus()
     message = "Processing withdrawal..."
     draw()
 
     local refreshed, refreshProblem = bank.refreshBalance()
+
     if not refreshed then
         message = refreshProblem or "Bank offline"
         busy = false
-        syncMachineState()
+        setRuntimeStatus()
         draw()
         return
     end
@@ -268,7 +289,7 @@ local function withdrawOne()
     if bank.getBalance() < CREDITS_PER_DIAMOND then
         message = "Need 10 credits"
         busy = false
-        syncMachineState()
+        setRuntimeStatus()
         draw()
         return
     end
@@ -276,7 +297,7 @@ local function withdrawOne()
     if countDiamonds(vaultChest) < 1 then
         message = "ATM vault is empty"
         busy = false
-        syncMachineState()
+        setRuntimeStatus()
         draw()
         return
     end
@@ -290,63 +311,75 @@ local function withdrawOne()
     if not spent then
         message = spendProblem or "Withdrawal declined"
         busy = false
-        syncMachineState()
+        setRuntimeStatus()
         draw()
         return
     end
 
     local moved = moveDiamonds(vaultChest, "front", 1)
+
     if moved ~= 1 then
-        bank.add(CREDITS_PER_DIAMOND, "atm", "Failed withdrawal refund")
+        bank.add(
+            CREDITS_PER_DIAMOND,
+            "atm",
+            "Failed withdrawal refund"
+        )
         message = "Output full; credits refunded"
     else
         message = "Take 1 diamond from front chest"
     end
 
     busy = false
-    syncMachineState()
+    setRuntimeStatus()
     draw()
 end
 
-local started, startProblem = machine.start()
-if not started then error(startProblem or "ATM could not start") end
+local function logout(reason)
+    player.logout()
+    activeCardId = nil
+    message = reason or "Logged out"
+    setRuntimeStatus()
+end
 
+machine.start()
 loginPlayer()
-syncMachineState()
+setRuntimeStatus()
 draw()
 
 local refreshTimer = os.startTimer(2)
 local heartbeatTimer = os.startTimer(5)
 
 while true do
-    local event, p1, _, p3 = os.pullEvent()
+    local event, p1, p2, p3 = os.pullEvent()
 
-    if event == "monitor_touch" and p1 == "top" and player.isLoggedIn() then
+    if event == "monitor_touch"
+    and p1 == "top"
+    and player.isLoggedIn()
+    then
+        local _, height = monitor.getSize()
+        local compact = height < 15
         local y = p3
-        if y == depositY then
+
+        if (compact and y == 8) or (not compact and y == 9) then
             depositAll()
-        elseif y == withdrawY then
+        elseif (compact and y == 10) or (not compact and y == 11) then
             withdrawOne()
-        elseif logoutY and y == logoutY then
-            player.logout()
-            message = "Logged out"
-            syncMachineState()
+        elseif not compact and y == 13 then
+            logout("Logged out")
             draw()
         end
 
     elseif event == "timer" and p1 == refreshTimer then
         if player.isLoggedIn() then
             if player.getLoginMethod() == "card" then
-                local cardUsername = readBankCard()
-                if cardUsername ~= player.getName() then
-                    player.logout()
-                    message = "Card removed - logged out"
+                local cardData = readAnyBankCard()
+                if not cardData or cardData.id ~= activeCardId then
+                    logout("Card removed - logged out")
                 else
                     bank.refreshBalance()
                 end
             elseif not player.isStillNearby() then
-                player.logout()
-                message = "Player logged out"
+                logout("Player logged out")
             else
                 bank.refreshBalance()
             end
@@ -354,17 +387,13 @@ while true do
             loginPlayer()
         end
 
-        syncMachineState()
+        setRuntimeStatus()
         draw()
         refreshTimer = os.startTimer(2)
 
     elseif event == "timer" and p1 == heartbeatTimer then
-        syncMachineState()
-        local ok, problem = machine.sendHeartbeat()
-        if not ok and not player.isLoggedIn() then
-            message = problem or "Server registration failed"
-            draw()
-        end
+        setRuntimeStatus()
+        machine.sendHeartbeat()
         heartbeatTimer = os.startTimer(5)
     end
 end
