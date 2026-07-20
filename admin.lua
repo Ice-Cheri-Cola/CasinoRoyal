@@ -1,6 +1,6 @@
 --================================================--
 -- Casino Royal
--- Version: 4.3.0
+-- Version: 4.3.1
 -- File: admin.lua
 -- Description: Bank card issuing terminal
 --================================================--
@@ -41,17 +41,14 @@ end
 
 local function waitForDisk()
     while true do
-        local driveName = card.getDriveName()
-        if not driveName then
-            print("No disk drive attached.")
-            print("Attach a disk drive, then press Enter.")
-            read()
-        elseif not disk.isPresent(driveName) then
-            print("Insert a blank floppy disk, then press Enter.")
-            read()
-        else
+        local ready, problem = card.getStatus()
+        if ready then
             return true
         end
+
+        print(tostring(problem))
+        print("Attach/insert the disk, then press Enter.")
+        read()
     end
 end
 
