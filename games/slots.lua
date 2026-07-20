@@ -1,13 +1,18 @@
 --================================================--
 -- Casino Royal
--- Version: 1.0.0
+-- Version: 4.1.0
 -- File: games/slots.lua
 -- Description: Animated Royal Slots
 --================================================--
 
-local display = require("core.display")
-local ui = require("core.ui")
-local bank = require("core.bank")
+local display =
+    require("core.display")
+
+local ui =
+    require("core.ui")
+
+local bank =
+    require("core.bank")
 
 local slots = {}
 
@@ -15,7 +20,8 @@ local slots = {}
 -- Game settings
 --------------------------------------------------
 
-local spinCost = 5
+local spinCost =
+    5
 
 local symbols = {
     "[GO]",
@@ -62,7 +68,10 @@ local function clearLine(y)
     )
 
     monitor.write(
-        string.rep(" ", width)
+        string.rep(
+            " ",
+            width
+        )
     )
 end
 
@@ -72,7 +81,9 @@ end
 
 local function randomSymbol()
     return symbols[
-        math.random(#symbols)
+        math.random(
+            #symbols
+        )
     ]
 end
 
@@ -87,13 +98,15 @@ local function drawBalance()
     display.center(
         3,
         "Credits: "
-        .. bank.getBalance()
+        .. tostring(
+            bank.getBalance()
+        )
     )
 
     display.center(
         4,
         "Cost: "
-        .. spinCost
+        .. tostring(spinCost)
     )
 end
 
@@ -106,7 +119,7 @@ local function drawMessage(message)
 
     display.center(
         8,
-        message
+        tostring(message)
     )
 end
 
@@ -173,30 +186,109 @@ local function getMatchCount(
 end
 
 --------------------------------------------------
+-- Process payout
+--------------------------------------------------
+
+local function payPrize(
+    prize,
+    message
+)
+    local paid, problem =
+        bank.add(
+            prize,
+            "slots",
+            message
+        )
+
+    if not paid then
+        drawMessage(
+            problem
+            or "PAYOUT FAILED"
+        )
+
+        return false
+    end
+
+    return true
+end
+
+--------------------------------------------------
 -- Spin reels
 --------------------------------------------------
 
 local function spin()
-    if not bank.canAfford(spinCost) then
+    ui.clearButton()
+
+    drawMessage(
+        "CHECKING ACCOUNT..."
+    )
+
+    local refreshed, refreshProblem =
+        bank.refreshBalance()
+
+    if not refreshed then
         drawMessage(
-            "NOT ENOUGH CREDITS!"
+            refreshProblem
+            or "BANK OFFLINE"
         )
+
+        slots.drawButtons()
 
         return
     end
 
-    ui.clearButton()
+    if not bank.canAfford(
+        spinCost
+    )
+    then
+        drawMessage(
+            "NOT ENOUGH CREDITS!"
+        )
 
-    bank.spend(spinCost)
+        slots.drawButtons()
+
+        return
+    end
+
+    local spent, spendProblem =
+        bank.spend(
+            spinCost,
+            "slots",
+            "Royal Slots wager"
+        )
+
+    if not spent then
+        drawMessage(
+            spendProblem
+            or "WAGER FAILED"
+        )
+
+        drawBalance()
+        slots.drawButtons()
+
+        return
+    end
+
+    bank.recordGame(
+        "slots"
+    )
 
     drawBalance()
-    drawMessage("SPINNING...")
+
+    drawMessage(
+        "SPINNING..."
+    )
 
     animateSpin()
 
-    local reel1 = randomSymbol()
-    local reel2 = randomSymbol()
-    local reel3 = randomSymbol()
+    local reel1 =
+        randomSymbol()
+
+    local reel2 =
+        randomSymbol()
+
+    local reel3 =
+        randomSymbol()
 
     drawReels(
         reel1,
@@ -204,32 +296,46 @@ local function spin()
         reel3
     )
 
-    local matches = getMatchCount(
-        reel1,
-        reel2,
-        reel3
-    )
+    local matches =
+        getMatchCount(
+            reel1,
+            reel2,
+            reel3
+        )
 
     if matches == 3 then
         local prize =
             payouts[reel1]
 
-        bank.add(prize)
+        local paid =
+            payPrize(
+                prize,
+                "Royal Slots jackpot"
+            )
 
-        drawMessage(
-            "ROYAL WIN! +"
-            .. prize
-        )
+        if paid then
+            drawMessage(
+                "ROYAL WIN! +"
+                .. tostring(prize)
+            )
+        end
 
     elseif matches == 2 then
-        local prize = 7
+        local prize =
+            7
 
-        bank.add(prize)
+        local paid =
+            payPrize(
+                prize,
+                "Royal Slots pair win"
+            )
 
-        drawMessage(
-            "PAIR WIN! +"
-            .. prize
-        )
+        if paid then
+            drawMessage(
+                "PAIR WIN! +"
+                .. tostring(prize)
+            )
+        end
 
     else
         drawMessage(
@@ -288,6 +394,16 @@ function slots.open()
         "ROYAL SLOTS"
     )
 
+    local refreshed, problem =
+        bank.refreshBalance()
+
+    if not refreshed then
+        drawMessage(
+            problem
+            or "BANK OFFLINE"
+        )
+    end
+
     drawBalance()
 
     drawReels(
@@ -296,11 +412,17 @@ function slots.open()
         "[EM]"
     )
 
-    drawMessage(
-        "GOOD LUCK!"
-    )
+    if refreshed then
+        drawMessage(
+            "GOOD LUCK!"
+        )
+    end
 
     slots.drawButtons()
 end
+
+--------------------------------------------------
+-- Return module
+--------------------------------------------------
 
 return slots
