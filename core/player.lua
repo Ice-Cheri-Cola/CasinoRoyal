@@ -1,133 +1,117 @@
 --================================================--
 -- Casino Royal
--- Version: 2.2.0
+-- Version: 4.2.0
 -- File: core/player.lua
--- Description: Player Detector login system
+-- Description: Player Detector and bank card login system
 --================================================--
 
 local player = {}
-
-local hardware =
-    require("core.hardware")
+local hardware = require("core.hardware")
 
 local currentPlayer = nil
-local detectionRange = 5
-
---------------------------------------------------
--- Get Player Detector
---------------------------------------------------
+local detectionRange = 2
+local loginMethod = nil
 
 local function getDetector()
     return hardware.getPlayerDetector()
 end
 
---------------------------------------------------
--- Get nearby players
---------------------------------------------------
-
 function player.getNearbyPlayers()
-    local detector =
-        getDetector()
+    local detector = getDetector()
+    if not detector then return {} end
 
-    local nearby =
-        detector.getPlayersInRange(
-            detectionRange
-        )
+    local ok, nearby = pcall(
+        detector.getPlayersInRange,
+        detectionRange
+    )
 
-    if nearby == nil then
+    if not ok or type(nearby) ~= "table" then
         return {}
     end
 
     return nearby
 end
 
---------------------------------------------------
--- Attempt login
---------------------------------------------------
-
 function player.login()
-    local nearby =
-        player.getNearbyPlayers()
+    local nearby = player.getNearbyPlayers()
 
     if #nearby == 0 then
-        return false,
-            "NO PLAYER DETECTED"
+        return false, "NO PLAYER DETECTED"
     end
 
     if #nearby > 1 then
-        return false,
-            "ONLY ONE PLAYER MAY LOGIN"
+        return false, "ONLY ONE PLAYER MAY LOGIN"
     end
 
-    currentPlayer =
-        nearby[1]
+    currentPlayer = nearby[1]
+    loginMethod = "detector"
 
-    return true,
-        currentPlayer
+    return true, currentPlayer
 end
 
---------------------------------------------------
--- Logout
---------------------------------------------------
+-- Used by trusted terminals after reading a Casino Royal bank card.
+function player.loginAs(username)
+    if type(username) ~= "string" then
+        return false, "INVALID CARD USERNAME"
+    end
+
+    username = username:match("^%s*(.-)%s*$")
+    if username == "" then
+        return false, "INVALID CARD USERNAME"
+    end
+
+    currentPlayer = username
+    loginMethod = "card"
+
+    return true, currentPlayer
+end
 
 function player.logout()
     currentPlayer = nil
+    loginMethod = nil
 end
-
---------------------------------------------------
--- Get active username
---------------------------------------------------
 
 function player.getName()
     return currentPlayer
 end
 
---------------------------------------------------
--- Check login
---------------------------------------------------
+function player.getLoginMethod()
+    return loginMethod
+end
 
 function player.isLoggedIn()
     return currentPlayer ~= nil
 end
 
---------------------------------------------------
--- Check whether active player remains nearby
---------------------------------------------------
-
 function player.isStillNearby()
-    if currentPlayer == nil then
-        return false
+    if currentPlayer == nil then return false end
+
+    -- Card sessions do not depend on the player detector. The ATM handles
+    -- their shorter timeout and explicit logout separately.
+    if loginMethod == "card" then
+        return true
     end
 
-    local detector =
-        getDetector()
+    local detector = getDetector()
+    if not detector then return false end
 
-    return detector.isPlayerInRange(
+    local ok, result = pcall(
+        detector.isPlayerInRange,
         detectionRange,
         currentPlayer
     )
+
+    return ok and result == true
 end
 
---------------------------------------------------
--- Set detection distance
---------------------------------------------------
-
 function player.setRange(range)
-    if type(range) ~= "number"
-    or range < 1
-    then
+    if type(range) ~= "number" or range < 1 then
         return false
     end
 
-    detectionRange =
-        math.floor(range)
-
+    detectionRange = math.floor(range)
     return true
 end
-
---------------------------------------------------
--- Get detection distance
---------------------------------------------------
 
 function player.getRange()
     return detectionRange
