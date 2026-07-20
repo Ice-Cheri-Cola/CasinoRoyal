@@ -1,6 +1,6 @@
 --================================================--
 -- Casino Royal
--- Version: 3.0.0
+-- Version: 4.2.0
 -- File: startup.lua
 -- Description: Automatic machine role launcher
 --================================================--
@@ -34,12 +34,11 @@ local function centerText(y, text, color)
     end
 
     term.write(text)
-
     term.setTextColor(colors.white)
 end
 
 --------------------------------------------------
--- Boot Screen
+-- Boot screen
 --------------------------------------------------
 
 local function showBoot(config)
@@ -47,14 +46,18 @@ local function showBoot(config)
 
     centerText(2, "CASINO ROYAL", colors.yellow)
     centerText(4, config.name, colors.cyan)
-    centerText(6, "TYPE: "..string.upper(config.type), colors.lightGray)
+    centerText(
+        6,
+        "TYPE: " .. string.upper(config.type),
+        colors.lightGray
+    )
     centerText(8, "STARTING...", colors.lime)
 
     sleep(1)
 end
 
 --------------------------------------------------
--- Error Screen
+-- Error screen
 --------------------------------------------------
 
 local function showError(message)
@@ -71,11 +74,25 @@ local function showError(message)
 end
 
 --------------------------------------------------
--- File exists?
+-- Program path helpers
 --------------------------------------------------
 
 local function exists(path)
     return fs.exists(path) and not fs.isDir(path)
+end
+
+local function resolveProgram(paths)
+    for _, path in ipairs(paths) do
+        if exists(path) then
+            return path
+        end
+    end
+
+    return nil
+end
+
+local function formatPaths(paths)
+    return table.concat(paths, " or ")
 end
 
 --------------------------------------------------
@@ -83,42 +100,85 @@ end
 --------------------------------------------------
 
 local function launch(config)
-
     local programs = {
-        menu = "casino.lua",
-        slots = "games/slots.lua",
-        blackjack = "blackjack.lua",
-        roulette = "roulette.lua",
-        higher_lower = "higher_lower.lua",
-        video_poker = "video_poker.lua",
-        craps = "craps.lua",
-        atm = "atm.lua",
-        admin = "admin.lua",
-        server = "server.lua"
+        menu = {
+            "terminals/menu.lua",
+            "casino.lua"
+        },
+
+        slots = {
+            "terminals/slots.lua",
+            "games/slots.lua"
+        },
+
+        blackjack = {
+            "terminals/blackjack.lua",
+            "blackjack.lua"
+        },
+
+        roulette = {
+            "terminals/roulette.lua",
+            "roulette.lua"
+        },
+
+        higher_lower = {
+            "terminals/higher_lower.lua",
+            "higher_lower.lua"
+        },
+
+        video_poker = {
+            "terminals/video_poker.lua",
+            "video_poker.lua"
+        },
+
+        craps = {
+            "terminals/craps.lua",
+            "craps.lua"
+        },
+
+        atm = {
+            "terminals/atm.lua",
+            "atm.lua"
+        },
+
+        admin = {
+            "admin/dashboard.lua",
+            "admin.lua"
+        },
+
+        server = {
+            "server.lua"
+        }
     }
 
-    local program = programs[config.type]
+    local candidates = programs[config.type]
+
+    if not candidates then
+        return false,
+            "Unknown machine type: " .. tostring(config.type)
+    end
+
+    local program = resolveProgram(candidates)
 
     if not program then
         return false,
-            "Unknown machine type: "..tostring(config.type)
-    end
-
-    if not exists(program) then
-        return false,
-            "Program not found: "..program
+            "Program not found: " .. formatPaths(candidates)
     end
 
     logger.info(
-        "Launching "..config.type
+        "Launching "
+        .. tostring(config.name)
+        .. " as "
+        .. tostring(config.type)
+        .. " using "
+        .. program
     )
 
-    local ok =
-        shell.run(program)
+    local ok = shell.run(program)
 
     if not ok then
         return false,
-            "Program stopped or failed: "..program
+            "Program stopped or failed: " .. program
     end
 
     return true
@@ -129,13 +189,9 @@ end
 --------------------------------------------------
 
 local function main()
+    logger.info("Casino Royal Boot")
 
-    logger.info(
-        "Casino Royal Boot"
-    )
-
-    local config, err =
-        machine.load()
+    local config, err = machine.load()
 
     if not config then
         showError(err)
@@ -145,17 +201,18 @@ local function main()
     if config.enabled == false then
         clearTerminal()
 
-        centerText(3,
+        centerText(
+            3,
             "MACHINE DISABLED",
-            colors.red)
+            colors.red
+        )
 
         return
     end
 
     showBoot(config)
 
-    local ok, problem =
-        launch(config)
+    local ok, problem = launch(config)
 
     if not ok then
         logger.error(problem)
@@ -164,13 +221,12 @@ local function main()
 end
 
 --------------------------------------------------
--- Safe Start
+-- Safe start
 --------------------------------------------------
 
-local ok, err =
-    pcall(main)
+local ok, err = pcall(main)
 
 if not ok then
-    logger.error(err)
+    logger.error(tostring(err))
     showError(err)
 end
