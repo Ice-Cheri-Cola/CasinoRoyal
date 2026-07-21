@@ -114,7 +114,9 @@ print("Installed " .. installed .. " files successfully!")
 term.setTextColor(colors.white)
 print("")
 print("Existing config and saved data were preserved.")
-print("Casino Royal will start in 2 seconds...")
+print("Rebooting to load the updated files...")
 sleep(2)
 
-shell.run("casino.lua")
+-- Reboot instead of immediately launching casino.lua. This clears Lua's
+-- module cache so updated core files are loaded rather than stale versions.
+os.reboot()
