@@ -80,15 +80,16 @@ local function drawScreen()
 
     gameui.header("ROYAL SLOTS", "LUCK FAVORS THE BOLD")
     gameui.labelValue(5, "CREDITS", wallet.getBalance(), colors.yellow)
-    gameui.labelValue(7, "BET", currentBet(), colors.yellow)
-    gameui.reels(9, reels)
+    gameui.reels(7, reels)
 
-    local smallButtonWidth = math.max(5, math.floor((width - 10) / 2))
+    display.center(13, "BET: " .. tostring(currentBet()), colors.yellow)
+
+    local betButtonWidth = math.max(6, math.floor(width / 4))
+    local controlsY = 14
     local leftX = 3
-    local rightX = width - smallButtonWidth - 2
-    local controlsY = math.min(height - 7, 14)
+    local rightX = width - betButtonWidth - 2
 
-    ui.button("bet_down", "- BET", leftX, controlsY, smallButtonWidth, 2, function()
+    ui.button("bet_down", "-", leftX, controlsY, betButtonWidth, 1, function()
         if spinning then return end
         betIndex = math.max(1, betIndex - 1)
         message = "BET: " .. currentBet()
@@ -96,7 +97,7 @@ local function drawScreen()
         drawScreen()
     end)
 
-    ui.button("bet_up", "BET +", rightX, controlsY, smallButtonWidth, 2, function()
+    ui.button("bet_up", "+", rightX, controlsY, betButtonWidth, 1, function()
         if spinning then return end
         betIndex = math.min(#betOptions, betIndex + 1)
         message = "BET: " .. currentBet()
@@ -104,13 +105,13 @@ local function drawScreen()
         drawScreen()
     end)
 
-    local spinY = controlsY + 3
+    local spinY = 16
     ui.button(
         "spin",
         spinning and "SPINNING" or "SPIN",
-        3,
+        4,
         spinY,
-        width - 4,
+        width - 6,
         2,
         function()
             if spinning then return end
@@ -141,7 +142,7 @@ local function drawScreen()
                     end
                 end
 
-                gameui.reels(9, reels)
+                gameui.reels(7, reels)
                 sleep(0.07)
             end
 
@@ -178,7 +179,7 @@ local function drawScreen()
         colors.white
     )
 
-    local backY = spinY + 3
+    local backY = 19
     if backY <= height - 1 then
         ui.button(
             "back",
@@ -197,7 +198,7 @@ local function drawScreen()
         )
     end
 
-    local statusY = math.min(height - 2, backY + 2)
+    local statusY = math.min(height - 2, 21)
     if statusY > backY then
         drawStatus(statusY)
     end
