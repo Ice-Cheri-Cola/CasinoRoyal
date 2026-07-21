@@ -3,13 +3,24 @@ local display = require("core.display")
 local ui = require("core.ui")
 local menu = require("games.menu")
 
-local function showMessage(title, message, color)
+local function showMessage(title, lines, color)
     ui.clear()
     display.clear()
     display.border()
+
+    local _, height = display.size()
     display.center(2, title, color or colors.yellow)
-    display.center(6, message, colors.white)
-    display.center(9, "TOUCH TO RETURN", colors.lightGray)
+
+    if type(lines) ~= "table" then
+        lines = { tostring(lines or "") }
+    end
+
+    local startY = math.max(4, math.floor(height / 2) - math.floor(#lines / 2))
+    for index, line in ipairs(lines) do
+        display.center(startY + index - 1, line, colors.white)
+    end
+
+    display.center(height - 2, "TOUCH TO RETURN", colors.lightGray)
 end
 
 local function returnToMenuOnTouch()
@@ -17,8 +28,8 @@ local function returnToMenuOnTouch()
     menu.open()
 end
 
-local function unavailable(title, message)
-    showMessage(title, message, colors.orange)
+local function unavailable(title, lines)
+    showMessage(title, lines, colors.orange)
     returnToMenuOnTouch()
 end
 
@@ -36,16 +47,26 @@ local function initialize()
 
     menu.setHandlers({
         deposit = function()
-            unavailable("INSERT DIAMONDS", "WALLET MODULE IS NEXT")
+            unavailable("DEPOSIT", {
+                "WALLET SYSTEM",
+                "COMING SOON"
+            })
         end,
         voucher = function()
-            unavailable("INSERT VOUCHER", "TICKET SYSTEM IS PLANNED")
+            unavailable("VOUCHER", {
+                "VOUCHER SYSTEM",
+                "COMING SOON"
+            })
         end,
         games = function()
-            unavailable("CHOOSE GAME", "SLOTS COMING AFTER WALLET")
+            unavailable("PLAY", {
+                "SLOTS ARE NEXT"
+            })
         end,
         cashout = function()
-            unavailable("CASH OUT", "NO ACTIVE BALANCE")
+            unavailable("CASH OUT", {
+                "BALANCE IS EMPTY"
+            })
         end
     })
 
@@ -75,7 +96,7 @@ local ok, problem = pcall(run)
 if not ok then
     pcall(function()
         display.clear()
-        display.center(2, "CASINO ROYAL ERROR", colors.red)
+        display.center(2, "CASINO ERROR", colors.red)
         display.center(5, tostring(problem), colors.white)
     end)
     error(problem, 0)
