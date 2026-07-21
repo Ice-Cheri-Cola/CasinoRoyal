@@ -12,6 +12,7 @@ local files = {
     "core/theme.lua",
     "core/wallet.lua",
     "core/gameui.lua",
+    "core/receipts.lua",
     "games/menu.lua",
     "games/slots.lua",
     "assets/themes.lua"
@@ -45,7 +46,6 @@ local function download(path, overwrite)
         return true, "PRESERVED"
     end
 
-    -- A folder named config.lua cannot be loaded with require("config").
     if fs.exists(path) and fs.isDir(path) then
         fs.delete(path)
     end
@@ -57,15 +57,12 @@ local function download(path, overwrite)
 
     local content = response.readAll()
     response.close()
-
     if not content or content == "" then
         return false, "Downloaded file was empty"
     end
 
     local temporary = path .. ".download"
-    if fs.exists(temporary) then
-        fs.delete(temporary)
-    end
+    if fs.exists(temporary) then fs.delete(temporary) end
 
     local handle = fs.open(temporary, "w")
     if not handle then
@@ -75,11 +72,8 @@ local function download(path, overwrite)
     handle.write(content)
     handle.close()
 
-    if fs.exists(path) then
-        fs.delete(path)
-    end
+    if fs.exists(path) then fs.delete(path) end
     fs.move(temporary, path)
-
     return true, "OK"
 end
 
