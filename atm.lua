@@ -1,15 +1,14 @@
 --================================================--
 -- Casino Royal
--- Version: 4.3.0
+-- Version: 4.3.1
 -- File: atm.lua
--- Description: Networked diamond ATM with bank cards
+-- Description: Networked diamond ATM
 --================================================--
 
 local player = require("core.player")
 local bank = require("core.bank")
 local machine = require("core.machine")
 local protocol = require("core.protocol")
-local card = require("core.card")
 
 local monitor = peripheral.wrap("top")
 local depositChest = peripheral.wrap("front")
@@ -17,11 +16,6 @@ local vaultChest = peripheral.wrap("back")
 
 local DIAMOND = "minecraft:diamond"
 local CREDITS_PER_DIAMOND = 10
-local CARD_PREFIXES = {
-    "Casino Royal Card: ",
-    "Casino Card: ",
-    "Bank Card: "
-}
 
 if not monitor then error("Monitor not found on top") end
 if not depositChest then error("Deposit chest not found on front") end
@@ -30,9 +24,8 @@ if not vaultChest then error("Vault chest not found on back") end
 player.setRange(2)
 monitor.setTextScale(0.5)
 
-local message = "Insert card or stand near ATM"
+local message = "Stand within 2 blocks"
 local busy = false
-local activeCardId = nil
 
 local function center(y, text, textColor, backgroundColor)
     local width = monitor.getSize()
@@ -57,11 +50,13 @@ end
 
 local function countDiamonds(inventory)
     local total = 0
+
     for _, item in pairs(inventory.list()) do
         if item.name == DIAMOND then
             total = total + item.count
         end
     end
+
     return total
 end
 
@@ -71,6 +66,7 @@ local function moveDiamonds(source, destinationName, amount)
 
     for slot, item in pairs(source.list()) do
         if remaining <= 0 then break end
+
         if item.name == DIAMOND then
             local transferred = source.pushItems(
                 destinationName,
@@ -86,60 +82,6 @@ local function moveDiamonds(source, destinationName, amount)
     return moved
 end
 
-local function getItemDisplayName(slot, summary)
-    if type(depositChest.getItemDetail) == "function" then
-        local ok, detail = pcall(depositChest.getItemDetail, slot)
-        if ok and type(detail) == "table" then
-            return detail.displayName or detail.name
-        end
-    end
-
-    return summary.displayName or summary.name
-end
-
-local function parseNamedCardUsername(displayName)
-    if type(displayName) ~= "string" then return nil end
-
-    for _, prefix in ipairs(CARD_PREFIXES) do
-        if displayName:sub(1, #prefix):lower() == prefix:lower() then
-            local username = displayName:sub(#prefix + 1):match("^%s*(.-)%s*$")
-            if username ~= "" then return username end
-        end
-    end
-
-    return nil
-end
-
-local function readNamedCard()
-    for slot, item in pairs(depositChest.list()) do
-        if item.name ~= DIAMOND then
-            local username = parseNamedCardUsername(
-                getItemDisplayName(slot, item)
-            )
-
-            if username then
-                return {
-                    username = username,
-                    id = "named:" .. username,
-                    kind = "named_item"
-                }
-            end
-        end
-    end
-
-    return nil
-end
-
-local function readAnyBankCard()
-    local diskCard = card.read()
-    if diskCard then
-        diskCard.kind = "disk"
-        return diskCard
-    end
-
-    return readNamedCard()
-end
-
 local function setRuntimeStatus()
     machine.setPlayer(player.getName())
     machine.setStatus(busy and protocol.STATUS_BUSY or protocol.STATUS_IDLE)
@@ -151,11 +93,10 @@ local function draw()
 
     local _, height = monitor.getSize()
     local compact = height < 15
+    local username = player.getName()
 
     center(1, "CASINO ROYAL", colors.yellow)
     center(2, "DIAMOND ATM", colors.cyan)
-
-    local username = player.getName()
 
     if username then
         center(4, username, colors.white)
@@ -167,58 +108,40 @@ local function draw()
             drawButton(10, "WITHDRAW 1", colors.blue)
             center(12, message, busy and colors.yellow or colors.white)
         else
-            center(7, "Login: " .. tostring(player.getLoginMethod() or "unknown"), colors.lightGray)
+            center(7, "Login: player detector", colors.lightGray)
             drawButton(9, "DEPOSIT ALL", colors.green)
             drawButton(11, "WITHDRAW 1", colors.blue)
             drawButton(13, "LOG OUT", colors.red)
             center(15, message, busy and colors.yellow or colors.white)
         end
     else
-        center(5, "INSERT BANK CARD", colors.orange)
-        center(6, "Disk drive or named item", colors.lightGray)
-        center(8, "OR STAND WITHIN 2 BLOCKS", colors.orange)
+        center(5, "STAND WITHIN 2 BLOCKS", colors.orange)
+        center(7, "Membership cards coming soon", colors.lightGray)
         center(math.min(height, 12), message, colors.white)
     end
 end
 
-local function loadAccount(username, method, cardId)
-    local ok, result
+local function loginPlayer()
+    player.logout()
 
-    if method == "card" then
-        ok, result = player.loginAs(username)
-        activeCardId = cardId
-    else
-        player.logout()
-        activeCardId = nil
-        ok, result = player.login()
-    end
+    local ok, result = player.login()
 
     if not ok then
-        message = result or "Login failed"
+        message = result or "Stand within 2 blocks"
         return false
     end
 
     local loaded, problem = bank.loadPlayer()
+
     if not loaded then
         player.logout()
-        activeCardId = nil
         message = problem or "Bank offline"
         return false
     end
 
-    message = method == "card" and "Bank card accepted" or "Account loaded"
+    message = "Account loaded"
     setRuntimeStatus()
     return true
-end
-
-local function loginPlayer()
-    local cardData = readAnyBankCard()
-
-    if cardData then
-        return loadAccount(cardData.username, "card", cardData.id)
-    end
-
-    return loadAccount(nil, "detector")
 end
 
 local function depositAll()
@@ -336,7 +259,6 @@ end
 
 local function logout(reason)
     player.logout()
-    activeCardId = nil
     message = reason or "Logged out"
     setRuntimeStatus()
 end
@@ -350,7 +272,7 @@ local refreshTimer = os.startTimer(2)
 local heartbeatTimer = os.startTimer(5)
 
 while true do
-    local event, p1, p2, p3 = os.pullEvent()
+    local event, p1, _, p3 = os.pullEvent()
 
     if event == "monitor_touch"
     and p1 == "top"
@@ -371,14 +293,7 @@ while true do
 
     elseif event == "timer" and p1 == refreshTimer then
         if player.isLoggedIn() then
-            if player.getLoginMethod() == "card" then
-                local cardData = readAnyBankCard()
-                if not cardData or cardData.id ~= activeCardId then
-                    logout("Card removed - logged out")
-                else
-                    bank.refreshBalance()
-                end
-            elseif not player.isStillNearby() then
+            if not player.isStillNearby() then
                 logout("Player logged out")
             else
                 bank.refreshBalance()
