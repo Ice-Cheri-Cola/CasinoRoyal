@@ -6,6 +6,7 @@ local theme = require("core.theme")
 
 local handlers = {}
 local walletBalance = 0
+local activePlayer = nil
 
 function menu.setHandlers(newHandlers)
     handlers = newHandlers or {}
@@ -13,6 +14,10 @@ end
 
 function menu.setBalance(amount)
     walletBalance = math.max(0, math.floor(tonumber(amount) or 0))
+end
+
+function menu.setPlayer(profile)
+    activePlayer = profile
 end
 
 local function balanceText(width)
@@ -23,6 +28,19 @@ local function balanceText(width)
     if #compact <= width then return compact end
 
     return tostring(walletBalance) .. " DIA"
+end
+
+local function playerText(width)
+    if not activePlayer then
+        return "NO MEMBER DETECTED"
+    end
+
+    local name = tostring(activePlayer.displayName or activePlayer.username or "MEMBER")
+    local rank = tostring(activePlayer.rank or "MEMBER")
+    local full = name .. "  |  " .. rank
+    if #full <= width then return full end
+    if #name <= width then return name end
+    return name:sub(1, math.max(1, width))
 end
 
 function menu.open()
@@ -37,6 +55,7 @@ function menu.open()
 
     display.center(2, "CASINO ROYAL", colorset.primary)
     display.center(3, "ATM10 EDITION", colorset.accent)
+    display.center(4, playerText(width - 2), activePlayer and colors.white or colors.orange)
     display.center(5, balanceText(width - 2), colors.lime)
 
     -- Short labels keep the interface readable on narrow monitors.
