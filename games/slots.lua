@@ -19,6 +19,8 @@ local betIndex = 3
 local message = "GOOD LUCK!"
 local messageColor = colors.white
 local spinning = false
+local celebrationTitle = nil
+local celebrationColor = nil
 
 local symbols = {
     { text = "CHR", color = colors.red, weight = 30, multiplier = 5 },
@@ -94,7 +96,13 @@ local function drawScreen(borderColors)
     local width, height = display.size()
     local colorset = theme.get()
 
-    gameui.header("ROYAL SLOTS", "LUCK FAVORS THE BOLD")
+    if celebrationTitle then
+        gameui.header(celebrationTitle, "CASINO ROYAL")
+        display.center(2, celebrationTitle, celebrationColor or colors.yellow)
+    else
+        gameui.header("ROYAL SLOTS", "LUCK FAVORS THE BOLD")
+    end
+
     gameui.labelValue(5, "CREDITS", wallet.getBalance(), colors.yellow)
     gameui.reels(7, reels, borderColors)
 
@@ -131,6 +139,9 @@ local function drawScreen(borderColors)
         2,
         function()
             if spinning then return end
+
+            celebrationTitle = nil
+            celebrationColor = nil
 
             local bet = currentBet()
             local spent, problem = wallet.spend(bet)
@@ -202,22 +213,41 @@ local function drawScreen(borderColors)
             end
 
             if prize > 0 then
+                if jackpot then
+                    celebrationTitle = reels[1].text == "777" and "777 JACKPOT!" or "ROYAL JACKPOT!"
+                    celebrationColor = colors.yellow
+                end
+
+                for flash = 1, jackpot and 8 or 4 do
+                    local borders = {}
+                    for reel = 1, 3 do
+                        if winningReels[reel] then
+                            borders[reel] = flash % 2 == 1 and colors.yellow or colors.white
+                        end
+                    end
+                    drawScreen(borders)
+                    speakerNote(jackpot and "bell" or "pling", 9 + flash, 1)
+                    sleep(jackpot and 0.13 or 0.1)
+                end
+
+                local steps = math.min(12, math.max(4, prize))
+                for step = 1, steps do
+                    local counted = math.floor(prize * step / steps)
+                    message = "PAYOUT  +" .. counted .. " / " .. prize
+                    messageColor = step == steps and colors.lime or colors.yellow
+                    drawScreen({ colors.yellow, colors.yellow, colors.yellow })
+                    speakerNote("pling", 10 + (step % 8), 0.8)
+                    sleep(jackpot and 0.09 or 0.06)
+                end
+
                 local paid, payProblem = wallet.add(prize)
                 if not paid then
+                    celebrationTitle = nil
                     message = payProblem or "PAYOUT FAILED"
                     messageColor = colors.red
                 else
-                    for flash = 1, jackpot and 6 or 4 do
-                        local borders = {}
-                        for reel = 1, 3 do
-                            if winningReels[reel] then
-                                borders[reel] = flash % 2 == 1 and colors.yellow or colors.white
-                            end
-                        end
-                        drawScreen(borders)
-                        speakerNote(jackpot and "bell" or "pling", 9 + flash, 1)
-                        sleep(jackpot and 0.13 or 0.1)
-                    end
+                    message = jackpot and ("JACKPOT PAID! +" .. prize) or ("WIN PAID! +" .. prize)
+                    messageColor = colors.lime
 
                     if jackpot then
                         speakerNote("bell", 16, 1)
@@ -249,6 +279,7 @@ local function drawScreen(borderColors)
             1,
             function()
                 if not spinning and handlers.back then
+                    celebrationTitle = nil
                     handlers.back()
                 end
             end,
@@ -273,6 +304,8 @@ end
 
 function slots.open()
     spinning = false
+    celebrationTitle = nil
+    celebrationColor = nil
     message = "GOOD LUCK!"
     messageColor = colors.white
     drawScreen()
