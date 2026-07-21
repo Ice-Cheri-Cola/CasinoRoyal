@@ -52,6 +52,53 @@ function wallet.getBalance()
     return balance
 end
 
+function wallet.canAfford(amount)
+    amount = math.max(0, math.floor(tonumber(amount) or 0))
+    return balance >= amount
+end
+
+function wallet.spend(amount)
+    amount = math.max(0, math.floor(tonumber(amount) or 0))
+
+    if amount <= 0 then
+        return false, "INVALID AMOUNT"
+    end
+
+    if balance < amount then
+        return false, "NOT ENOUGH CREDITS"
+    end
+
+    local oldBalance = balance
+    balance = balance - amount
+
+    local ok, problem = save()
+    if not ok then
+        balance = oldBalance
+        return false, problem
+    end
+
+    return true, balance
+end
+
+function wallet.add(amount)
+    amount = math.max(0, math.floor(tonumber(amount) or 0))
+
+    if amount <= 0 then
+        return false, "INVALID AMOUNT"
+    end
+
+    local oldBalance = balance
+    balance = balance + amount
+
+    local ok, problem = save()
+    if not ok then
+        balance = oldBalance
+        return false, problem
+    end
+
+    return true, balance
+end
+
 local function countCurrency(manager)
     if not manager or not manager.getItems then
         return 0
