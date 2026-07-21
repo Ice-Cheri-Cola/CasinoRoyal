@@ -15,6 +15,10 @@ local files = {
     "assets/themes.lua"
 }
 
+local preserveIfPresent = {
+    "config.lua"
+}
+
 local function heading(text)
     term.setTextColor(colors.yellow)
     print(text)
@@ -28,8 +32,12 @@ local function ensureDirectory(path)
     end
 end
 
-local function download(path)
+local function download(path, overwrite)
     ensureDirectory(path)
+
+    if overwrite == false and fs.exists(path) then
+        return true, "PRESERVED"
+    end
 
     local response, problem = http.get(BASE .. path)
     if not response then
@@ -61,7 +69,28 @@ local function download(path)
     end
     fs.move(temporary, path)
 
-    return true
+    return true, "OK"
+end
+
+local function installPath(path, overwrite)
+    write("  " .. path .. " ... ")
+    local ok, status = download(path, overwrite)
+
+    if ok then
+        if status == "PRESERVED" then
+            term.setTextColor(colors.lightGray)
+            print("PRESERVED")
+        else
+            term.setTextColor(colors.lime)
+            print("OK")
+        end
+    else
+        term.setTextColor(colors.red)
+        print("FAILED")
+    end
+
+    term.setTextColor(colors.white)
+    return ok, status
 end
 
 term.setBackgroundColor(colors.black)
@@ -80,20 +109,22 @@ local installed = 0
 local failures = {}
 
 for _, path in ipairs(files) do
-    write("  " .. path .. " ... ")
-    local ok, problem = download(path)
-
+    local ok, problem = installPath(path, true)
     if ok then
-        term.setTextColor(colors.lime)
-        print("OK")
         installed = installed + 1
     else
-        term.setTextColor(colors.red)
-        print("FAILED")
         failures[#failures + 1] = path .. ": " .. tostring(problem)
     end
+end
 
-    term.setTextColor(colors.white)
+for _, path in ipairs(preserveIfPresent) do
+    local existed = fs.exists(path)
+    local ok, problem = installPath(path, false)
+    if ok and not existed then
+        installed = installed + 1
+    elseif not ok then
+        failures[#failures + 1] = path .. ": " .. tostring(problem)
+    end
 end
 
 print("")
