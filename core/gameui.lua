@@ -41,13 +41,13 @@ function gameui.labelValue(y, label, value, valueColor)
     screen.write(rightText)
 end
 
-local function drawReelBox(x, y, width, symbol, symbolColor)
+local function drawReelBox(x, y, width, symbol, symbolColor, borderColor)
     local screen = monitor()
     local background = theme.get().background
     local inside = width - 2
 
     screen.setBackgroundColor(background)
-    screen.setTextColor(colors.lightGray)
+    screen.setTextColor(borderColor or colors.lightGray)
 
     screen.setCursorPos(x, y)
     screen.write("+" .. string.rep("-", inside) .. "+")
@@ -67,7 +67,7 @@ local function drawReelBox(x, y, width, symbol, symbolColor)
     screen.write(text)
 end
 
-function gameui.reels(y, reels)
+function gameui.reels(y, reels, borderColors)
     local screen = monitor()
     local width = screen.getSize()
     local reelWidth = 10
@@ -89,7 +89,8 @@ function gameui.reels(y, reels)
             y,
             reelWidth,
             reel.text or reel[1] or "---",
-            reel.color or reel[2] or colors.white
+            reel.color or reel[2] or colors.white,
+            borderColors and borderColors[index] or nil
         )
     end
 end
