@@ -18,6 +18,12 @@ local function findFirst(types)
     return nil
 end
 
+local function findWirelessModem()
+    return peripheral.find("modem", function(_, modem)
+        return modem.isWireless and modem.isWireless()
+    end)
+end
+
 function hardware.scan()
     devices.monitor = peripheral.find("monitor")
     devices.speaker = peripheral.find("speaker")
@@ -25,7 +31,7 @@ function hardware.scan()
         "inventory_manager",
         "inventoryManager"
     })
-    devices.modem = peripheral.find("modem")
+    devices.modem = findWirelessModem() or peripheral.find("modem")
     devices.diskDrive = peripheral.find("drive")
     return devices
 end
@@ -34,12 +40,17 @@ function hardware.get()
     return devices
 end
 
-function hardware.requireMonitor()
+function hardware.getMonitor()
     if not devices.monitor then hardware.scan() end
-    if not devices.monitor then
+    return devices.monitor
+end
+
+function hardware.requireMonitor()
+    local monitor = hardware.getMonitor()
+    if not monitor then
         error("Casino Royal requires an Advanced Monitor.", 0)
     end
-    return devices.monitor
+    return monitor
 end
 
 function hardware.getSpeaker()
@@ -50,6 +61,11 @@ end
 function hardware.getInventoryManager()
     if not devices.inventoryManager then hardware.scan() end
     return devices.inventoryManager
+end
+
+function hardware.getModem()
+    if not devices.modem then hardware.scan() end
+    return devices.modem
 end
 
 function hardware.getDiskDrive()
