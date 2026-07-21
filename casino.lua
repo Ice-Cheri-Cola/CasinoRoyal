@@ -81,14 +81,19 @@ local function deposit()
     local oldBalance = wallet.getBalance()
     depositAnimation()
 
-    local ok, amount, status = wallet.depositAll()
+    local ok, amount, status, transaction = wallet.depositAll()
 
     if ok then
         local newBalance = wallet.getBalance()
         menu.setBalance(newBalance)
         animateBalance(oldBalance, newBalance)
 
-        local printed, printStatus = receipts.printDeposit(amount, newBalance, status)
+        local printed, printStatus = receipts.printDeposit(
+            amount,
+            newBalance,
+            status,
+            transaction
+        )
         local receiptLine
         local receiptColor = colors.lime
 
@@ -102,9 +107,14 @@ local function deposit()
             receiptColor = colors.lightGray
         end
 
+        local transactionLine = "ID: " .. tostring(
+            transaction and transaction.id or "UNAVAILABLE"
+        )
+
         showMessage("DEPOSIT COMPLETE", {
             "+" .. tostring(amount) .. " DIAMONDS",
             "BALANCE: " .. tostring(newBalance),
+            transactionLine,
             tostring(status),
             receiptLine
         }, status == "VAULT FULL" and colors.orange or colors.lime)
