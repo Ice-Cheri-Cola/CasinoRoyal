@@ -38,6 +38,8 @@ local function normalizeProfile(profile)
     profile.stats.gamesPlayed = math.max(0, math.floor(tonumber(profile.stats.gamesPlayed) or 0))
     profile.stats.achievements = math.max(0, math.floor(tonumber(profile.stats.achievements) or 0))
     profile.visits = math.max(0, math.floor(tonumber(profile.visits) or 0))
+    profile.cardHash = type(profile.cardHash) == "string" and profile.cardHash or nil
+    profile.cardIssuedAt = tonumber(profile.cardIssuedAt) or nil
     profile.rank = calculateRank(profile)
     return profile
 end
@@ -128,8 +130,46 @@ function players.getById(memberId)
     return nil
 end
 
-function players.record(statName, amount)
-    local profile = players.getActive()
+function players.getByCard(cardHash)
+    if type(cardHash) ~= "string" or cardHash == "" then return nil end
+    for _, profile in pairs(database.profiles) do
+        if profile.cardHash == cardHash then return profile end
+    end
+    return nil
+end
+
+function players.bindCard(profile, cardHash)
+    if type(profile) ~= "table" or not profile.id then
+        return false, "INVALID MEMBER PROFILE"
+    end
+    if type(cardHash) ~= "string" or cardHash == "" then
+        return false, "INVALID ID CARD"
+    end
+
+    local existing = players.getByCard(cardHash)
+    if existing and existing.id ~= profile.id then
+        return false, "CARD ALREADY REGISTERED"
+    end
+
+    profile.cardHash = cardHash
+    profile.cardIssuedAt = os.epoch("utc")
+    profile.lastSeenAt = os.epoch("utc")
+    local ok, problem = save()
+    if not ok then return false, problem end
+    return true, "CASINO ID REGISTERED"
+end
+
+function players.revokeCard(profile)
+    if type(profile) ~= "table" then return false, "INVALID MEMBER PROFILE" end
+    profile.cardHash = nil
+    profile.cardIssuedAt = nil
+    local ok, problem = save()
+    if not ok then return false, problem end
+    return true, "CASINO ID REVOKED"
+end
+
+function players.record(statName, amount, profile)
+    profile = profile or players.getActive()
     if not profile then return false, "NO ACTIVE PLAYER" end
     profile.stats = type(profile.stats) == "table" and profile.stats or {}
     amount = math.floor(tonumber(amount) or 1)
