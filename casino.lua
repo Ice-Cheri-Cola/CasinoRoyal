@@ -67,13 +67,10 @@ local function openSlots()
     slots.setBalance(wallet.getBalance())
     slots.setHandlers({
         betDown = function()
-            -- Bet controls become active in the next slots milestone.
         end,
         betUp = function()
-            -- Bet controls become active in the next slots milestone.
         end,
         spin = function()
-            -- Reel animation and payouts become active in the next milestone.
         end,
         back = openMenu
     })
@@ -118,8 +115,10 @@ local function run()
     initialize()
 
     while true do
-        local event, _, x, y = os.pullEvent()
-        if event == "monitor_touch" then
+        local event, p1, x, y = os.pullEvent()
+        local handledBySlots = slots.handleEvent(event, p1)
+
+        if event == "monitor_touch" and not handledBySlots then
             ui.handleTouch(x, y)
         elseif event == "peripheral_detach" or event == "peripheral" then
             hardware.scan()
