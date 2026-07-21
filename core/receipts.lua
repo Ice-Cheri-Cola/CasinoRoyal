@@ -8,7 +8,14 @@ local function centerText(text, width)
     return string.rep(" ", math.floor((width - #text) / 2)) .. text
 end
 
-function receipts.printDeposit(amount, balance, status)
+local function formatDate(timestamp)
+    timestamp = math.floor((tonumber(timestamp) or os.epoch("utc")) / 1000)
+    local ok, value = pcall(os.date, "%Y-%m-%d %H:%M", timestamp)
+    if ok and value then return value end
+    return "DATE UNAVAILABLE"
+end
+
+function receipts.printDeposit(amount, balance, status, transaction)
     local printer = hardware.getPrinter()
     if not printer then
         return false, "NO PRINTER CONNECTED"
@@ -38,18 +45,25 @@ function receipts.printDeposit(amount, balance, status)
         printer.write(tostring(text or ""):sub(1, width))
     end
 
-    line(1, centerText("CASINO ROYAL BANK", width))
-    line(2, string.rep("=", width))
-    line(4, "TRANSACTION: DEPOSIT")
-    line(6, "AMOUNT: +" .. tostring(amount))
-    line(7, "CURRENCY: DIAMONDS")
-    line(9, "NEW BALANCE: " .. tostring(balance))
-    line(11, tostring(status or "DEPOSIT COMPLETE"))
-    line(13, string.rep("-", width))
-    line(15, centerText("THANK YOU", width))
+    local transactionId = transaction and transaction.id or "CR-UNAVAILABLE"
+    local timestamp = transaction and transaction.timestamp or os.epoch("utc")
+
+    line(1, centerText("CASINO ROYAL", width))
+    line(2, centerText("OFFICIAL RECEIPT", width))
+    line(3, string.rep("=", width))
+    line(5, "ID: " .. tostring(transactionId))
+    line(6, "TYPE: DEPOSIT")
+    line(8, "AMOUNT: +" .. tostring(amount))
+    line(9, "CURRENCY: DIAMONDS")
+    line(11, "NEW BALANCE: " .. tostring(balance))
+    line(13, formatDate(timestamp))
+    line(15, tostring(status or "DEPOSIT COMPLETE"))
+    line(17, string.rep("-", width))
+    line(19, centerText("THANK YOU FOR VISITING", width))
+    line(20, centerText("CASINO ROYAL", width))
 
     if printer.setPageTitle then
-        pcall(printer.setPageTitle, "Casino Royal Deposit")
+        pcall(printer.setPageTitle, "Casino Royal " .. tostring(transactionId))
     end
 
     local ended, printed = pcall(printer.endPage)
@@ -57,7 +71,7 @@ function receipts.printDeposit(amount, balance, status)
         return false, "PRINTER COULD NOT FINISH PAGE"
     end
 
-    return true, "RECEIPT PRINTED"
+    return true, "RECEIPT " .. tostring(transactionId) .. " PRINTED"
 end
 
 return receipts
