@@ -5,7 +5,8 @@ local devices = {
     speaker = nil,
     inventoryManager = nil,
     modem = nil,
-    diskDrive = nil
+    diskDrive = nil,
+    printer = nil
 }
 
 local function findFirst(types)
@@ -33,6 +34,7 @@ function hardware.scan()
     })
     devices.modem = findWirelessModem() or peripheral.find("modem")
     devices.diskDrive = peripheral.find("drive")
+    devices.printer = peripheral.find("printer")
     return devices
 end
 
@@ -73,6 +75,11 @@ function hardware.getDiskDrive()
     return devices.diskDrive
 end
 
+function hardware.getPrinter()
+    if not devices.printer then hardware.scan() end
+    return devices.printer
+end
+
 function hardware.status()
     if not devices.monitor then hardware.scan() end
     return {
@@ -80,7 +87,8 @@ function hardware.status()
         speaker = devices.speaker ~= nil,
         inventoryManager = devices.inventoryManager ~= nil,
         modem = devices.modem ~= nil,
-        diskDrive = devices.diskDrive ~= nil
+        diskDrive = devices.diskDrive ~= nil,
+        printer = devices.printer ~= nil
     }
 end
 
