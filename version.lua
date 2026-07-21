@@ -1,0 +1,6 @@
+return {
+    major = 0,
+    minor = 1,
+    patch = 0,
+    name = "Casino Royal"
+}
