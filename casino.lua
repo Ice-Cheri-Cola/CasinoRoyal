@@ -2,6 +2,7 @@ local hardware = require("core.hardware")
 local display = require("core.display")
 local ui = require("core.ui")
 local menu = require("games.menu")
+local slots = require("games.slots")
 local wallet = require("core.wallet")
 
 local function showMessage(title, lines, color)
@@ -24,10 +25,14 @@ local function showMessage(title, lines, color)
     display.center(height - 2, "TOUCH TO RETURN", colors.lightGray)
 end
 
-local function returnToMenuOnTouch()
-    os.pullEvent("monitor_touch")
+local function openMenu()
     menu.setBalance(wallet.getBalance())
     menu.open()
+end
+
+local function returnToMenuOnTouch()
+    os.pullEvent("monitor_touch")
+    openMenu()
 end
 
 local function unavailable(title, lines)
@@ -58,6 +63,23 @@ local function deposit()
     returnToMenuOnTouch()
 end
 
+local function openSlots()
+    slots.setBalance(wallet.getBalance())
+    slots.setHandlers({
+        betDown = function()
+            -- Bet controls become active in the next slots milestone.
+        end,
+        betUp = function()
+            -- Bet controls become active in the next slots milestone.
+        end,
+        spin = function()
+            -- Reel animation and payouts become active in the next milestone.
+        end,
+        back = openMenu
+    })
+    slots.open()
+end
+
 local function initialize()
     local devices = hardware.scan()
     local monitor = hardware.requireMonitor()
@@ -79,11 +101,7 @@ local function initialize()
                 "COMING SOON"
             })
         end,
-        games = function()
-            unavailable("PLAY", {
-                "SLOTS ARE NEXT"
-            })
-        end,
+        games = openSlots,
         cashout = function()
             unavailable("CASH OUT", {
                 "COMING SOON"
@@ -91,8 +109,7 @@ local function initialize()
         end
     })
 
-    menu.setBalance(wallet.getBalance())
-    menu.open()
+    openMenu()
 
     return devices
 end
