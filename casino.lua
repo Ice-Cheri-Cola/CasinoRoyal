@@ -6,6 +6,7 @@ local slots = require("games.slots")
 local wallet = require("core.wallet")
 local receipts = require("core.receipts")
 local players = require("core.players")
+local auth = require("core.auth")
 
 local function speakerNote(instrument, pitch, volume)
     local speaker = hardware.getSpeaker()
@@ -27,14 +28,16 @@ local function showMessage(title, lines, color, footer)
     display.center(height - 2, footer or "TOUCH TO RETURN", colors.lightGray)
 end
 
-local function refreshPlayer()
+-- Bank identity: always comes from the Advanced Peripherals Memory Card.
+local function refreshBankPlayer()
     local ok, profile = players.activateCurrent()
     menu.setPlayer(profile)
     return ok, profile
 end
 
 local function openMenu()
-    refreshPlayer()
+    auth.logout()
+    refreshBankPlayer()
     menu.setBalance(wallet.getBalance())
     menu.open()
 end
@@ -55,11 +58,22 @@ local function formatDate(timestamp)
     return ok and value or "UNAVAILABLE"
 end
 
+local function registerCasinoId(profile)
+    local registered, status = auth.registerCurrentCard(profile)
+    showMessage(registered and "ID REGISTERED" or "REGISTRATION FAILED", {
+        tostring(status),
+        registered and tostring(profile.id or "") or "",
+        registered and "REMOVE AND KEEP YOUR CARD" or "PLACE ONE MFFS ID IN CHEST"
+    }, registered and colors.lime or colors.red)
+    speakerNote(registered and "bell" or "bass", registered and 18 or 4, 1)
+    returnToMenuOnTouch()
+end
+
 local function openMembership()
-    local ok, profile = refreshPlayer()
+    local ok, profile = refreshBankPlayer()
     if not profile then
         showMessage("MEMBERSHIP", {
-            "NO ACTIVE MEMBER",
+            "NO ACTIVE BANK MEMBER",
             "CHECK MEMORY CARD",
             "AND PLAYER CONNECTION"
         }, colors.orange)
@@ -73,35 +87,27 @@ local function openMembership()
     local width, height = display.size()
     local contentWidth = math.max(1, width - 4)
     local stats = type(profile.stats) == "table" and profile.stats or {}
+    local cardStatus = profile.cardHash and "CASINO ID: REGISTERED" or "CASINO ID: NOT REGISTERED"
 
     display.center(2, "MEMBER PROFILE", colors.yellow)
     display.center(3, tostring(profile.displayName or profile.username or "MEMBER"), colors.white)
     display.center(4, tostring(profile.id or "NO ID"), colors.lightBlue)
     display.center(5, tostring(profile.rank or "MEMBER"), colors.lime)
+    display.center(6, cardStatus, profile.cardHash and colors.lime or colors.orange)
 
     if height >= 18 then
-        display.center(7, "BALANCE: " .. tostring(wallet.getBalance()), colors.yellow)
-        display.center(8, "VISITS: " .. tostring(profile.visits or 0), colors.white)
-        display.center(9, "DEPOSITED: " .. tostring(stats.deposits or 0), colors.white)
-        display.center(10, "WITHDRAWN: " .. tostring(stats.withdrawals or 0), colors.white)
+        display.center(8, "BALANCE: " .. tostring(wallet.getBalance()), colors.yellow)
+        display.center(9, "VISITS: " .. tostring(profile.visits or 0), colors.white)
+        display.center(10, "DEPOSITED: " .. tostring(stats.deposits or 0), colors.white)
         display.center(11, "MEMBER SINCE: " .. formatDate(profile.joinedAt), colors.lightGray)
-        ui.button("print_card", "PRINT CARD", 3, 13, contentWidth, 2, function()
-            local printed, status = receipts.printMembershipCard(profile)
-            showMessage(printed and "CARD PRINTED" or "PRINT FAILED", {
-                tostring(status),
-                tostring(profile.id or "")
-            }, printed and colors.lime or colors.red)
-            speakerNote(printed and "bell" or "bass", printed and 18 or 4, 1)
-            returnToMenuOnTouch()
+        ui.button("register_id", profile.cardHash and "REPLACE CASINO ID" or "REGISTER CASINO ID", 3, 13, contentWidth, 2, function()
+            registerCasinoId(profile)
         end)
         ui.button("member_back", "BACK", 3, 16, contentWidth, 1, openMenu)
     else
-        display.center(7, "BAL: " .. tostring(wallet.getBalance()) .. "  VISITS: " .. tostring(profile.visits or 0), colors.white)
-        ui.button("print_card", "PRINT CARD", 3, 9, contentWidth, 1, function()
-            local printed, status = receipts.printMembershipCard(profile)
-            showMessage(printed and "CARD PRINTED" or "PRINT FAILED", tostring(status), printed and colors.lime or colors.red)
-            speakerNote(printed and "bell" or "bass", printed and 18 or 4, 1)
-            returnToMenuOnTouch()
+        display.center(8, "BAL: " .. tostring(wallet.getBalance()), colors.white)
+        ui.button("register_id", profile.cardHash and "REPLACE ID" or "REGISTER ID", 3, 9, contentWidth, 1, function()
+            registerCasinoId(profile)
         end)
         ui.button("member_back", "BACK", 3, 11, contentWidth, 1, openMenu)
     end
@@ -135,14 +141,26 @@ local function animateBalance(oldBalance, newBalance)
     end
 end
 
+-- Bank transactions continue to use only the Memory Card identity.
 local function deposit()
+    local bankOk, bankProfile = refreshBankPlayer()
+    if not bankOk or not bankProfile then
+        showMessage("BANK ACCESS DENIED", {
+            "MEMORY CARD REQUIRED",
+            "PLAYER MUST BE ONLINE"
+        }, colors.red)
+        speakerNote("bass", 4, 1)
+        returnToMenuOnTouch()
+        return
+    end
+
     local oldBalance = wallet.getBalance()
     depositAnimation()
     local ok, amount, status, transaction = wallet.depositAll()
     if ok then
         local newBalance = wallet.getBalance()
         menu.setBalance(newBalance)
-        players.record("deposits", amount)
+        players.record("deposits", amount, bankProfile)
         animateBalance(oldBalance, newBalance)
         local printed, printStatus = receipts.printDeposit(amount, newBalance, status, transaction)
         local receiptLine
@@ -176,7 +194,28 @@ local function deposit()
     returnToMenuOnTouch()
 end
 
+-- Casino games authenticate only through the registered MFFS Identification Card.
 local function openSlots()
+    local loggedIn, casinoProfile, problem = auth.login()
+    if not loggedIn then
+        showMessage("CASINO ACCESS DENIED", {
+            tostring(problem),
+            "INSERT REGISTERED MFFS ID",
+            "IN THE FRONT CHEST"
+        }, colors.red)
+        speakerNote("bass", 4, 1)
+        returnToMenuOnTouch()
+        return
+    end
+
+    showMessage("ACCESS GRANTED", {
+        "WELCOME " .. tostring(casinoProfile.displayName or casinoProfile.username or "MEMBER"),
+        tostring(casinoProfile.id or ""),
+        tostring(casinoProfile.rank or "MEMBER")
+    }, colors.lime, "LOADING CASINO...")
+    speakerNote("bell", 18, 1)
+    sleep(0.8)
+
     slots.setBalance(wallet.getBalance())
     slots.setHandlers({
         betDown = function() end,
@@ -197,7 +236,7 @@ local function initialize()
     display.center(6, "SYSTEM STARTING", colors.white)
     wallet.load()
     players.load()
-    refreshPlayer()
+    refreshBankPlayer()
     sleep(0.8)
     menu.setHandlers({
         deposit = deposit,
@@ -220,7 +259,8 @@ local function run()
             ui.handleTouch(x, y)
         elseif event == "peripheral_detach" or event == "peripheral" then
             hardware.scan()
-            refreshPlayer()
+            auth.validateSession()
+            refreshBankPlayer()
         elseif event == "terminate" then
             display.clear()
             return
