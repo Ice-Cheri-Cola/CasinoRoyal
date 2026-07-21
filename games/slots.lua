@@ -11,6 +11,7 @@ local gameui = require("core.gameui")
 local ui = require("core.ui")
 local theme = require("core.theme")
 local wallet = require("core.wallet")
+local hardware = require("core.hardware")
 
 local handlers = {}
 local betOptions = { 1, 5, 10, 25, 50, 100 }
@@ -43,6 +44,12 @@ local function currentBet()
     return betOptions[betIndex]
 end
 
+local function speakerNote(instrument, pitch, volume)
+    local speaker = hardware.getSpeaker()
+    if not speaker or not speaker.playNote then return end
+    pcall(speaker.playNote, instrument or "bell", volume or 1, pitch or 12)
+end
+
 local function randomSymbol()
     local total = 0
     for _, symbol in ipairs(symbols) do
@@ -62,6 +69,15 @@ local function randomSymbol()
     return symbols[1]
 end
 
+local function nextSymbol(symbol)
+    for index, candidate in ipairs(symbols) do
+        if candidate == symbol then
+            return symbols[index % #symbols + 1]
+        end
+    end
+    return symbols[1]
+end
+
 local function drawStatus(y)
     local width = display.size()
     local text = tostring(message or "")
@@ -71,7 +87,7 @@ local function drawStatus(y)
     display.center(y, text, messageColor)
 end
 
-local function drawScreen()
+local function drawScreen(borderColors)
     ui.clear()
     display.clear()
 
@@ -80,7 +96,7 @@ local function drawScreen()
 
     gameui.header("ROYAL SLOTS", "LUCK FAVORS THE BOLD")
     gameui.labelValue(5, "CREDITS", wallet.getBalance(), colors.yellow)
-    gameui.reels(7, reels)
+    gameui.reels(7, reels, borderColors)
 
     display.center(13, "BET: " .. tostring(currentBet()), colors.yellow)
 
@@ -121,6 +137,7 @@ local function drawScreen()
             if not spent then
                 message = problem or "WAGER FAILED"
                 messageColor = colors.red
+                speakerNote("bass", 4, 1)
                 drawScreen()
                 return
             end
@@ -128,37 +145,57 @@ local function drawScreen()
             spinning = true
             message = "SPINNING..."
             messageColor = colors.yellow
+            speakerNote("hat", 10, 0.7)
             drawScreen()
 
             local final = { randomSymbol(), randomSymbol(), randomSymbol() }
-            local stopFrames = { 12, 18, 24 }
+            local stopFrames = { 14, 21, 29 }
+            local stopped = { false, false, false }
 
             for frame = 1, stopFrames[3] do
                 for reel = 1, 3 do
-                    if frame <= stopFrames[reel] then
-                        reels[reel] = randomSymbol()
+                    if frame < stopFrames[reel] then
+                        reels[reel] = nextSymbol(reels[reel])
                     else
                         reels[reel] = final[reel]
+                        if not stopped[reel] then
+                            stopped[reel] = true
+                            speakerNote("hat", 7 + reel * 2, 1)
+                        end
                     end
                 end
 
                 gameui.reels(7, reels)
-                sleep(0.07)
+                sleep(frame > 20 and 0.11 or 0.075)
             end
 
             reels = final
 
             local prize = 0
+            local winningReels = { false, false, false }
+            local jackpot = false
+
             if reels[1].text == reels[2].text and reels[2].text == reels[3].text then
                 prize = bet * reels[1].multiplier
                 message = "ROYAL WIN! +" .. prize
                 messageColor = colors.lime
-            elseif reels[1].text == reels[2].text
-                or reels[1].text == reels[3].text
-                or reels[2].text == reels[3].text then
+                winningReels = { true, true, true }
+                jackpot = true
+            elseif reels[1].text == reels[2].text then
                 prize = bet * 2
                 message = "PAIR WIN! +" .. prize
                 messageColor = colors.lime
+                winningReels = { true, true, false }
+            elseif reels[1].text == reels[3].text then
+                prize = bet * 2
+                message = "PAIR WIN! +" .. prize
+                messageColor = colors.lime
+                winningReels = { true, false, true }
+            elseif reels[2].text == reels[3].text then
+                prize = bet * 2
+                message = "PAIR WIN! +" .. prize
+                messageColor = colors.lime
+                winningReels = { false, true, true }
             else
                 message = "TRY AGAIN!"
                 messageColor = colors.lightGray
@@ -169,7 +206,29 @@ local function drawScreen()
                 if not paid then
                     message = payProblem or "PAYOUT FAILED"
                     messageColor = colors.red
+                else
+                    for flash = 1, jackpot and 6 or 4 do
+                        local borders = {}
+                        for reel = 1, 3 do
+                            if winningReels[reel] then
+                                borders[reel] = flash % 2 == 1 and colors.yellow or colors.white
+                            end
+                        end
+                        drawScreen(borders)
+                        speakerNote(jackpot and "bell" or "pling", 9 + flash, 1)
+                        sleep(jackpot and 0.13 or 0.1)
+                    end
+
+                    if jackpot then
+                        speakerNote("bell", 16, 1)
+                        sleep(0.08)
+                        speakerNote("bell", 20, 1)
+                        sleep(0.08)
+                        speakerNote("bell", 24, 1)
+                    end
                 end
+            else
+                speakerNote("bass", 5, 0.7)
             end
 
             spinning = false
