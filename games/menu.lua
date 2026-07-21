@@ -23,18 +23,13 @@ end
 local function balanceText(width)
     local full = "BALANCE  " .. walletBalance .. " DIAMONDS"
     if #full <= width then return full end
-
     local compact = "BALANCE  " .. walletBalance
     if #compact <= width then return compact end
-
     return tostring(walletBalance) .. " DIA"
 end
 
 local function playerText(width)
-    if not activePlayer then
-        return "NO MEMBER DETECTED"
-    end
-
+    if not activePlayer then return "NO MEMBER DETECTED" end
     local name = tostring(activePlayer.displayName or activePlayer.username or "MEMBER")
     local rank = tostring(activePlayer.rank or "MEMBER")
     local full = name .. "  |  " .. rank
@@ -58,16 +53,15 @@ function menu.open()
     display.center(4, playerText(width - 2), activePlayer and colors.white or colors.orange)
     display.center(5, balanceText(width - 2), colors.lime)
 
-    -- Short labels keep the interface readable on narrow monitors.
     if height <= 12 then
         ui.button("deposit", "DEPOSIT", x, 7, contentWidth, 1, handlers.deposit)
-        ui.button("voucher", "VOUCHER", x, 9, contentWidth, 1, handlers.voucher)
+        ui.button("membership", "MEMBER", x, 9, contentWidth, 1, handlers.membership)
         ui.button("games", "PLAY", x, 11, contentWidth, 1, handlers.games)
         return
     end
 
     ui.button("deposit", "DEPOSIT", x, 7, contentWidth, 2, handlers.deposit)
-    ui.button("voucher", "VOUCHER", x, 10, contentWidth, 2, handlers.voucher)
+    ui.button("membership", "MEMBERSHIP", x, 10, contentWidth, 2, handlers.membership)
     ui.button("games", "PLAY", x, 13, contentWidth, 2, handlers.games)
 
     if height >= 18 then
