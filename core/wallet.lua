@@ -9,17 +9,22 @@ if okConfig and type(loadedConfig) == "table" and loadedConfig.currency then
 end
 
 local SAVE_PATH = "data/wallet.db"
+local LOG_PATH = "data/transactions.log"
 local balance = 0
 
 local directions = {
     "front", "back", "left", "right", "top", "bottom"
 }
 
-local function save()
-    local directory = fs.getDir(SAVE_PATH)
+local function ensureDataDirectory(path)
+    local directory = fs.getDir(path)
     if directory ~= "" and not fs.exists(directory) then
         fs.makeDir(directory)
     end
+end
+
+local function save()
+    ensureDataDirectory(SAVE_PATH)
 
     local handle = fs.open(SAVE_PATH, "w")
     if not handle then
@@ -27,6 +32,22 @@ local function save()
     end
 
     handle.write(tostring(balance))
+    handle.close()
+    return true
+end
+
+local function logTransaction(kind, amount, resultingBalance)
+    ensureDataDirectory(LOG_PATH)
+    local handle = fs.open(LOG_PATH, "a")
+    if not handle then return false end
+
+    local stamp = tostring(os.epoch("utc"))
+    handle.writeLine(table.concat({
+        stamp,
+        tostring(kind or "TRANSACTION"),
+        tostring(math.floor(tonumber(amount) or 0)),
+        tostring(math.floor(tonumber(resultingBalance) or balance))
+    }, "|"))
     handle.close()
     return true
 end
@@ -57,7 +78,7 @@ function wallet.canAfford(amount)
     return balance >= amount
 end
 
-function wallet.spend(amount)
+function wallet.spend(amount, kind)
     amount = math.max(0, math.floor(tonumber(amount) or 0))
 
     if amount <= 0 then
@@ -77,10 +98,11 @@ function wallet.spend(amount)
         return false, problem
     end
 
+    logTransaction(kind or "SPEND", -amount, balance)
     return true, balance
 end
 
-function wallet.add(amount)
+function wallet.add(amount, kind)
     amount = math.max(0, math.floor(tonumber(amount) or 0))
 
     if amount <= 0 then
@@ -96,7 +118,38 @@ function wallet.add(amount)
         return false, problem
     end
 
+    logTransaction(kind or "CREDIT", amount, balance)
     return true, balance
+end
+
+function wallet.getRecentTransactions(limit)
+    limit = math.max(1, math.floor(tonumber(limit) or 10))
+    if not fs.exists(LOG_PATH) then return {} end
+
+    local handle = fs.open(LOG_PATH, "r")
+    if not handle then return {} end
+
+    local entries = {}
+    while true do
+        local line = handle.readLine()
+        if not line then break end
+        local stamp, kind, amount, entryBalance = line:match("([^|]*)|([^|]*)|([^|]*)|([^|]*)")
+        if stamp then
+            entries[#entries + 1] = {
+                timestamp = tonumber(stamp) or 0,
+                kind = kind,
+                amount = tonumber(amount) or 0,
+                balance = tonumber(entryBalance) or 0
+            }
+        end
+    end
+    handle.close()
+
+    local recent = {}
+    for index = #entries, math.max(1, #entries - limit + 1), -1 do
+        recent[#recent + 1] = entries[index]
+    end
+    return recent
 end
 
 local function countCurrency(manager)
@@ -177,8 +230,15 @@ function wallet.depositAll()
         return false, 0, "CASINO VAULT FULL"
     end
 
+    local oldBalance = balance
     balance = balance + deposited
-    save()
+    local saved, problem = save()
+    if not saved then
+        balance = oldBalance
+        return false, 0, problem
+    end
+
+    logTransaction("DEPOSIT", deposited, balance)
 
     if deposited < available then
         return true, deposited, "VAULT FULL"
