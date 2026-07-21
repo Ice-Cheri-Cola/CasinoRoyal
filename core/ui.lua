@@ -1,167 +1,62 @@
---================================================--
--- Casino Royal
--- Version: 0.3.0
--- File: core/ui.lua
--- Description: Touchscreen UI system
---================================================--
-
 local ui = {}
-
-local display = require("core.display")
+local hardware = require("core.hardware")
 local theme = require("core.theme")
 
+local buttons = {}
 
-ui.buttons = {}
-
---------------------------------------------------
--- Create a button
---------------------------------------------------
-
-function ui.clearButton()
-    ui.buttons = {}
+local function monitor()
+    return hardware.requireMonitor()
 end
-
---------------------------------------------------
--- Create a button
---------------------------------------------------
-
-function ui.button(
-    text,
-    x,
-    y,
-    width,
-    height,
-    callback
-)
-
-    local button = {
-
-        text = text,
-
-        x = x,
-        y = y,
-
-        width = width,
-        height = height,
-
-        callback = callback
-
-    }
-
-
-    table.insert(
-        ui.buttons,
-        button
-    )
-
-
-    ui.drawButton(button)
-
-end
-
-
-
---------------------------------------------------
--- Draw button
---------------------------------------------------
-
-function ui.drawButton(button)
-
-    local monitor = peripheral.wrap("top")
-
-    if not monitor then
-        return
-    end
-
-
-    monitor.setBackgroundColor(
-        theme.get().secondary
-    )
-
-
-    for row =
-        button.y,
-        button.y + button.height - 1
-    do
-
-        monitor.setCursorPos(
-            button.x,
-            row
-        )
-
-        monitor.write(
-            string.rep(
-                " ",
-                button.width
-            )
-        )
-
-    end
-
-
-    monitor.setTextColor(
-        theme.get().background
-    )
-
-
-    monitor.setCursorPos(
-        button.x + 1,
-        button.y + math.floor(button.height / 2)
-    )
-
-
-    monitor.write(
-        button.text
-    )
-
-end
-
-
-
---------------------------------------------------
--- Touch handler
---------------------------------------------------
-
-function ui.handleTouch(x,y)
-
-    for _,button in ipairs(ui.buttons)
-    do
-
-        if x >= button.x
-        and x <= button.x + button.width
-        and y >= button.y
-        and y <= button.y + button.height
-        then
-
-            if button.callback then
-
-                button.callback()
-
-            end
-
-            return true
-
-        end
-
-    end
-
-
-    return false
-
-end
-
-
-
---------------------------------------------------
--- Clear buttons
---------------------------------------------------
 
 function ui.clear()
-
-    ui.buttons = {}
-
+    buttons = {}
 end
 
+function ui.button(id, text, x, y, width, height, callback, background, foreground)
+    local button = {
+        id = id,
+        text = tostring(text),
+        x = x,
+        y = y,
+        width = width,
+        height = height,
+        callback = callback,
+        background = background or theme.get().secondary,
+        foreground = foreground or theme.get().background
+    }
 
+    buttons[#buttons + 1] = button
+
+    local screen = monitor()
+    screen.setBackgroundColor(button.background)
+    screen.setTextColor(button.foreground)
+
+    for row = button.y, button.y + button.height - 1 do
+        screen.setCursorPos(button.x, row)
+        screen.write(string.rep(" ", button.width))
+    end
+
+    local label = button.text:sub(1, button.width)
+    local labelX = button.x + math.floor((button.width - #label) / 2)
+    local labelY = button.y + math.floor((button.height - 1) / 2)
+    screen.setCursorPos(labelX, labelY)
+    screen.write(label)
+
+    return button
+end
+
+function ui.handleTouch(x, y)
+    for i = #buttons, 1, -1 do
+        local button = buttons[i]
+        if x >= button.x
+            and x < button.x + button.width
+            and y >= button.y
+            and y < button.y + button.height then
+            if button.callback then button.callback(button.id) end
+            return button.id
+        end
+    end
+    return nil
+end
 
 return ui
