@@ -14,6 +14,7 @@ local files = {
     "core/gameui.lua",
     "core/receipts.lua",
     "core/players.lua",
+    "core/auth.lua",
     "games/menu.lua",
     "games/slots.lua",
     "assets/themes.lua"
