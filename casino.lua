@@ -28,7 +28,7 @@ local function showMessage(title, lines, color, footer)
     display.center(height - 2, footer or "TOUCH TO RETURN", colors.lightGray)
 end
 
--- Bank identity: always comes from the Advanced Peripherals Memory Card.
+-- Bank identity always comes from the Advanced Peripherals Memory Card.
 local function refreshBankPlayer()
     local ok, profile = players.activateCurrent()
     menu.setPlayer(profile)
@@ -194,27 +194,31 @@ local function deposit()
     returnToMenuOnTouch()
 end
 
--- Casino games authenticate only through the registered MFFS Identification Card.
+-- Casino membership is optional. Registered MFFS cards enable member tracking,
+-- rewards, ranks, and future benefits. Guests may still play every public game.
 local function openSlots()
-    local loggedIn, casinoProfile, problem = auth.login()
-    if not loggedIn then
-        showMessage("CASINO ACCESS DENIED", {
-            tostring(problem),
-            "INSERT REGISTERED MFFS ID",
-            "IN THE FRONT CHEST"
-        }, colors.red)
-        speakerNote("bass", 4, 1)
-        returnToMenuOnTouch()
-        return
-    end
+    auth.logout()
+    local loggedIn, casinoProfile = auth.login()
 
-    showMessage("ACCESS GRANTED", {
-        "WELCOME " .. tostring(casinoProfile.displayName or casinoProfile.username or "MEMBER"),
-        tostring(casinoProfile.id or ""),
-        tostring(casinoProfile.rank or "MEMBER")
-    }, colors.lime, "LOADING CASINO...")
-    speakerNote("bell", 18, 1)
-    sleep(0.8)
+    if loggedIn and casinoProfile then
+        showMessage("MEMBER RECOGNIZED", {
+            "WELCOME " .. tostring(casinoProfile.displayName or casinoProfile.username or "MEMBER"),
+            tostring(casinoProfile.id or ""),
+            tostring(casinoProfile.rank or "MEMBER"),
+            "REWARDS TRACKING ACTIVE"
+        }, colors.lime, "LOADING CASINO...")
+        speakerNote("bell", 18, 1)
+        sleep(0.8)
+    else
+        auth.logout()
+        showMessage("GUEST PLAY", {
+            "WELCOME TO CASINO ROYAL",
+            "MEMBERSHIP IS OPTIONAL",
+            "GUEST REWARDS ARE NOT TRACKED"
+        }, colors.lightBlue, "LOADING CASINO...")
+        speakerNote("pling", 12, 0.8)
+        sleep(0.8)
+    end
 
     slots.setBalance(wallet.getBalance())
     slots.setHandlers({
