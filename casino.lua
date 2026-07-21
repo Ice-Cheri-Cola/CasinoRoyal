@@ -1,366 +1,82 @@
---================================================--
--- Casino Royal
--- Version: 4.0.0
--- File: casino.lua
--- Description: Player login and application controller
---================================================--
+local hardware = require("core.hardware")
+local display = require("core.display")
+local ui = require("core.ui")
+local menu = require("games.menu")
 
-local logger =
-    require("core.logger")
-
-local menu =
-    require("games.menu")
-
-local display =
-    require("core.display")
-
-local ui =
-    require("core.ui")
-
-local player =
-    require("core.player")
-
-local bank =
-    require("core.bank")
-
-local machine =
-    require("core.machine")
-
-local protocol =
-    require("core.protocol")
-
---------------------------------------------------
--- Settings
---------------------------------------------------
-
-local monitorSide =
-    "top"
-
-local checkDelay =
-    0.5
-
---------------------------------------------------
--- Runtime state
---------------------------------------------------
-
-local casinoOpen =
-    false
-
-local lastStatus =
-    nil
-
---------------------------------------------------
--- Show waiting screen
---------------------------------------------------
-
-local function showWaiting(message)
-    ui.clearButton()
+local function showMessage(title, message, color)
+    ui.clear()
     display.clear()
     display.border()
-
-    display.center(
-        2,
-        "CASINO ROYAL"
-    )
-
-    display.center(
-        5,
-        "WAITING FOR PLAYER"
-    )
-
-    display.center(
-        7,
-        message
-        or "APPROACH THE CASINO"
-    )
-
-    display.center(
-        9,
-        "RANGE: "
-        .. player.getRange()
-        .. " BLOCKS"
-    )
+    display.center(2, title, color or colors.yellow)
+    display.center(6, message, colors.white)
+    display.center(9, "TOUCH TO RETURN", colors.lightGray)
 end
 
---------------------------------------------------
--- Show login message
---------------------------------------------------
-
-local function showWelcome(username)
-    ui.clearButton()
-    display.clear()
-    display.border()
-
-    display.center(
-        2,
-        "CASINO ROYAL"
-    )
-
-    display.center(
-        5,
-        "WELCOME"
-    )
-
-    display.center(
-        7,
-        username
-    )
-
-    display.center(
-        9,
-        "LOADING ACCOUNT..."
-    )
-end
-
---------------------------------------------------
--- Show logout message
---------------------------------------------------
-
-local function showLogout(username)
-    ui.clearButton()
-    display.clear()
-    display.border()
-
-    display.center(
-        4,
-        "PLAYER LEFT"
-    )
-
-    display.center(
-        6,
-        username
-    )
-
-    display.center(
-        8,
-        "SAVING ACCOUNT..."
-    )
-end
-
---------------------------------------------------
--- Reset machine state
---------------------------------------------------
-
-local function resetMachineState()
-    machine.clearPlayer()
-
-    machine.setStatus(
-        protocol.STATUS_IDLE
-    )
-end
-
---------------------------------------------------
--- Attempt player login
---------------------------------------------------
-
-local function attemptLogin()
-    local success, result =
-        player.login()
-
-    if not success then
-        if result ~= lastStatus then
-            showWaiting(result)
-
-            lastStatus =
-                result
-        end
-
-        return
-    end
-
-    local username =
-        result
-
-    machine.setPlayer(
-        username
-    )
-
-    machine.setStatus(
-        protocol.STATUS_BUSY
-    )
-
-    showWelcome(username)
-
-    local loaded, loadResult =
-        bank.loadPlayer()
-
-    if not loaded then
-        player.logout()
-
-        resetMachineState()
-
-        showWaiting(
-            loadResult
-            or "ACCOUNT LOAD FAILED"
-        )
-
-        lastStatus =
-            loadResult
-
-        return
-    end
-
-    logger.info(
-        "Player logged in: "
-        .. username
-    )
-
-    sleep(1)
-
-    casinoOpen = true
-    lastStatus = nil
-
+local function returnToMenuOnTouch()
+    os.pullEvent("monitor_touch")
     menu.open()
 end
 
---------------------------------------------------
--- Log out active player
---------------------------------------------------
-
-local function logoutPlayer()
-    local username =
-        player.getName()
-        or "UNKNOWN"
-
-    showLogout(username)
-
-    bank.unload()
-    player.logout()
-
-    casinoOpen = false
-
-    resetMachineState()
-
-    logger.info(
-        "Player logged out: "
-        .. username
-    )
-
-    sleep(1)
-
-    showWaiting(
-        "APPROACH THE CASINO"
-    )
-
-    lastStatus = nil
+local function unavailable(title, message)
+    showMessage(title, message, colors.orange)
+    returnToMenuOnTouch()
 end
 
---------------------------------------------------
--- Touchscreen loop
---------------------------------------------------
+local function initialize()
+    local devices = hardware.scan()
+    local monitor = hardware.requireMonitor()
+    monitor.setTextScale(0.5)
 
-local function touchscreenLoop()
+    display.clear()
+    display.border()
+    display.center(4, "CASINO ROYAL", colors.yellow)
+    display.center(6, "SYSTEM STARTING", colors.white)
+
+    sleep(0.8)
+
+    menu.setHandlers({
+        deposit = function()
+            unavailable("INSERT DIAMONDS", "WALLET MODULE IS NEXT")
+        end,
+        voucher = function()
+            unavailable("INSERT VOUCHER", "TICKET SYSTEM IS PLANNED")
+        end,
+        games = function()
+            unavailable("CHOOSE GAME", "SLOTS COMING AFTER WALLET")
+        end,
+        cashout = function()
+            unavailable("CASH OUT", "NO ACTIVE BALANCE")
+        end
+    })
+
+    menu.setBalance(0)
+    menu.open()
+
+    return devices
+end
+
+local function run()
+    initialize()
+
     while true do
-        local _, side, x, y =
-            os.pullEvent(
-                "monitor_touch"
-            )
-
-        if casinoOpen
-        and side == monitorSide
-        then
-            ui.handleTouch(
-                x,
-                y
-            )
+        local event, _, x, y = os.pullEvent()
+        if event == "monitor_touch" then
+            ui.handleTouch(x, y)
+        elseif event == "peripheral_detach" or event == "peripheral" then
+            hardware.scan()
+        elseif event == "terminate" then
+            display.clear()
+            return
         end
     end
 end
 
---------------------------------------------------
--- Player detection loop
---------------------------------------------------
-
-local function playerDetectionLoop()
-    while true do
-        if player.isLoggedIn() then
-            if not player.isStillNearby() then
-                logoutPlayer()
-            end
-        else
-            attemptLogin()
-        end
-
-        sleep(checkDelay)
-    end
-end
-
---------------------------------------------------
--- Machine heartbeat loop
---------------------------------------------------
-
-local function heartbeatLoop()
-    machine.heartbeatLoop()
-end
-
---------------------------------------------------
--- Initialize casino
---------------------------------------------------
-
-local function initializeCasino()
-    logger.info(
-        "Casino Application Starting - Version "
-        .. protocol.VERSION
-    )
-
-    local started, problem =
-        machine.start()
-
-    if not started then
-        error(
-            problem
-            or "MACHINE COULD NOT START"
-        )
-    end
-
-    display.init()
-
-    resetMachineState()
-
-    showWaiting(
-        "APPROACH THE CASINO"
-    )
-end
-
---------------------------------------------------
--- Run casino systems simultaneously
---------------------------------------------------
-
-local function runCasino()
-    initializeCasino()
-
-    parallel.waitForAll(
-        touchscreenLoop,
-        playerDetectionLoop,
-        heartbeatLoop
-    )
-end
-
---------------------------------------------------
--- Safe shutdown
---------------------------------------------------
-
-local success, problem =
-    pcall(runCasino)
-
-bank.unload()
-player.logout()
-
-resetMachineState()
-machine.stop()
-
-pcall(
-    display.clear
-)
-
-if not success then
-    logger.error(
-        "Casino application stopped: "
-        .. tostring(problem)
-    )
-
-    error(
-        problem,
-        0
-    )
+local ok, problem = pcall(run)
+if not ok then
+    pcall(function()
+        display.clear()
+        display.center(2, "CASINO ROYAL ERROR", colors.red)
+        display.center(5, tostring(problem), colors.white)
+    end)
+    error(problem, 0)
 end
