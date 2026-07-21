@@ -4,8 +4,15 @@ local ui = require("core.ui")
 local menu = require("games.menu")
 local slots = require("games.slots")
 local wallet = require("core.wallet")
+local receipts = require("core.receipts")
 
-local function showMessage(title, lines, color)
+local function speakerNote(instrument, pitch, volume)
+    local speaker = hardware.getSpeaker()
+    if not speaker or not speaker.playNote then return end
+    pcall(speaker.playNote, instrument or "pling", volume or 1, pitch or 12)
+end
+
+local function showMessage(title, lines, color, footer)
     ui.clear()
     display.clear()
     display.border()
@@ -22,7 +29,7 @@ local function showMessage(title, lines, color)
         display.center(startY + index - 1, line, colors.white)
     end
 
-    display.center(height - 2, "TOUCH TO RETURN", colors.lightGray)
+    display.center(height - 2, footer or "TOUCH TO RETURN", colors.lightGray)
 end
 
 local function openMenu()
@@ -40,24 +47,81 @@ local function unavailable(title, lines)
     returnToMenuOnTouch()
 end
 
+local function depositAnimation()
+    local frames = {
+        { "SCANNING INVENTORY", "PLEASE WAIT" },
+        { "DIAMONDS DETECTED", "VERIFYING AMOUNT" },
+        { "MOVING TO VAULT", "SECURING FUNDS" }
+    }
+
+    for index, lines in ipairs(frames) do
+        showMessage("DEPOSIT", lines, index == #frames and colors.yellow or colors.lightBlue, "PROCESSING...")
+        speakerNote("hat", 7 + index * 2, 0.65)
+        sleep(0.45)
+    end
+end
+
+local function animateBalance(oldBalance, newBalance)
+    local difference = math.max(0, newBalance - oldBalance)
+    local steps = math.min(14, math.max(4, difference))
+
+    for step = 1, steps do
+        local shown = oldBalance + math.floor(difference * step / steps)
+        showMessage("DEPOSIT ACCEPTED", {
+            "BALANCE",
+            tostring(shown),
+            "+" .. tostring(difference) .. " DIAMONDS"
+        }, step == steps and colors.lime or colors.yellow, "COUNTING CREDITS...")
+        speakerNote("pling", 9 + step % 7, 0.7)
+        sleep(0.07)
+    end
+end
+
 local function deposit()
-    showMessage("DEPOSIT", {
-        "CHECKING INVENTORY",
-        "PLEASE WAIT"
-    }, colors.yellow)
+    local oldBalance = wallet.getBalance()
+    depositAnimation()
 
     local ok, amount, status = wallet.depositAll()
 
     if ok then
-        menu.setBalance(wallet.getBalance())
-        showMessage("DEPOSIT", {
+        local newBalance = wallet.getBalance()
+        menu.setBalance(newBalance)
+        animateBalance(oldBalance, newBalance)
+
+        local printed, printStatus = receipts.printDeposit(amount, newBalance, status)
+        local receiptLine
+        local receiptColor = colors.lime
+
+        if printed then
+            receiptLine = printStatus
+        elseif hardware.getPrinter() then
+            receiptLine = printStatus
+            receiptColor = colors.orange
+        else
+            receiptLine = "NO PRINTER CONNECTED"
+            receiptColor = colors.lightGray
+        end
+
+        showMessage("DEPOSIT COMPLETE", {
             "+" .. tostring(amount) .. " DIAMONDS",
-            tostring(status)
+            "BALANCE: " .. tostring(newBalance),
+            tostring(status),
+            receiptLine
         }, status == "VAULT FULL" and colors.orange or colors.lime)
+
+        speakerNote("bell", 16, 1)
+        sleep(0.08)
+        speakerNote("bell", 20, 1)
+
+        if receiptColor == colors.orange then
+            sleep(0.2)
+            speakerNote("bass", 5, 0.6)
+        end
     else
-        showMessage("DEPOSIT", {
+        showMessage("DEPOSIT FAILED", {
             tostring(status)
         }, colors.red)
+        speakerNote("bass", 4, 1)
     end
 
     returnToMenuOnTouch()
@@ -66,12 +130,9 @@ end
 local function openSlots()
     slots.setBalance(wallet.getBalance())
     slots.setHandlers({
-        betDown = function()
-        end,
-        betUp = function()
-        end,
-        spin = function()
-        end,
+        betDown = function() end,
+        betUp = function() end,
+        spin = function() end,
         back = openMenu
     })
     slots.open()
