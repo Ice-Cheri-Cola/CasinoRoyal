@@ -2,6 +2,7 @@ local hardware = require("core.hardware")
 local display = require("core.display")
 local ui = require("core.ui")
 local menu = require("games.menu")
+local wallet = require("core.wallet")
 
 local function showMessage(title, lines, color)
     ui.clear()
@@ -25,11 +26,35 @@ end
 
 local function returnToMenuOnTouch()
     os.pullEvent("monitor_touch")
+    menu.setBalance(wallet.getBalance())
     menu.open()
 end
 
 local function unavailable(title, lines)
     showMessage(title, lines, colors.orange)
+    returnToMenuOnTouch()
+end
+
+local function deposit()
+    showMessage("DEPOSIT", {
+        "CHECKING INVENTORY",
+        "PLEASE WAIT"
+    }, colors.yellow)
+
+    local ok, amount, status = wallet.depositAll()
+
+    if ok then
+        menu.setBalance(wallet.getBalance())
+        showMessage("DEPOSIT", {
+            "+" .. tostring(amount) .. " DIAMONDS",
+            tostring(status)
+        }, status == "VAULT FULL" and colors.orange or colors.lime)
+    else
+        showMessage("DEPOSIT", {
+            tostring(status)
+        }, colors.red)
+    end
+
     returnToMenuOnTouch()
 end
 
@@ -43,15 +68,11 @@ local function initialize()
     display.center(4, "CASINO ROYAL", colors.yellow)
     display.center(6, "SYSTEM STARTING", colors.white)
 
+    wallet.load()
     sleep(0.8)
 
     menu.setHandlers({
-        deposit = function()
-            unavailable("DEPOSIT", {
-                "WALLET SYSTEM",
-                "COMING SOON"
-            })
-        end,
+        deposit = deposit,
         voucher = function()
             unavailable("VOUCHER", {
                 "VOUCHER SYSTEM",
@@ -65,12 +86,12 @@ local function initialize()
         end,
         cashout = function()
             unavailable("CASH OUT", {
-                "BALANCE IS EMPTY"
+                "COMING SOON"
             })
         end
     })
 
-    menu.setBalance(0)
+    menu.setBalance(wallet.getBalance())
     menu.open()
 
     return devices
