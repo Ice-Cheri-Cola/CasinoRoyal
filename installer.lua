@@ -32,14 +32,23 @@ local function ensureDirectory(path)
     end
 end
 
+local function cacheBustedUrl(path)
+    return BASE .. path .. "?cb=" .. tostring(os.epoch("utc"))
+end
+
 local function download(path, overwrite)
     ensureDirectory(path)
 
-    if overwrite == false and fs.exists(path) then
+    if overwrite == false and fs.exists(path) and not fs.isDir(path) then
         return true, "PRESERVED"
     end
 
-    local response, problem = http.get(BASE .. path)
+    -- A folder named config.lua cannot be loaded with require("config").
+    if fs.exists(path) and fs.isDir(path) then
+        fs.delete(path)
+    end
+
+    local response, problem = http.get(cacheBustedUrl(path))
     if not response then
         return false, problem or "HTTP request failed"
     end
@@ -118,7 +127,7 @@ for _, path in ipairs(files) do
 end
 
 for _, path in ipairs(preserveIfPresent) do
-    local existed = fs.exists(path)
+    local existed = fs.exists(path) and not fs.isDir(path)
     local ok, problem = installPath(path, false)
     if ok and not existed then
         installed = installed + 1
@@ -149,6 +158,4 @@ print("Existing config and saved data were preserved.")
 print("Rebooting to load the updated files...")
 sleep(2)
 
--- Reboot instead of immediately launching casino.lua. This clears Lua's
--- module cache so updated core files are loaded rather than stale versions.
 os.reboot()
