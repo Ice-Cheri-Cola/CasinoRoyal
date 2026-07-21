@@ -5,6 +5,7 @@ local menu = require("games.menu")
 local slots = require("games.slots")
 local wallet = require("core.wallet")
 local receipts = require("core.receipts")
+local players = require("core.players")
 
 local function speakerNote(instrument, pitch, volume)
     local speaker = hardware.getSpeaker()
@@ -32,7 +33,14 @@ local function showMessage(title, lines, color, footer)
     display.center(height - 2, footer or "TOUCH TO RETURN", colors.lightGray)
 end
 
+local function refreshPlayer()
+    local ok, profile = players.activateCurrent()
+    menu.setPlayer(profile)
+    return ok, profile
+end
+
 local function openMenu()
+    refreshPlayer()
     menu.setBalance(wallet.getBalance())
     menu.open()
 end
@@ -86,6 +94,7 @@ local function deposit()
     if ok then
         local newBalance = wallet.getBalance()
         menu.setBalance(newBalance)
+        players.record("deposits", amount)
         animateBalance(oldBalance, newBalance)
 
         local printed, printStatus = receipts.printDeposit(
@@ -159,6 +168,8 @@ local function initialize()
     display.center(6, "SYSTEM STARTING", colors.white)
 
     wallet.load()
+    players.load()
+    refreshPlayer()
     sleep(0.8)
 
     menu.setHandlers({
@@ -193,6 +204,7 @@ local function run()
             ui.handleTouch(x, y)
         elseif event == "peripheral_detach" or event == "peripheral" then
             hardware.scan()
+            refreshPlayer()
         elseif event == "terminate" then
             display.clear()
             return
