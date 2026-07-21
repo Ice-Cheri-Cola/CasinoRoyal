@@ -10,6 +10,7 @@ end
 
 local SAVE_PATH = "data/wallet.db"
 local LOG_PATH = "data/transactions.log"
+local COUNTER_PATH = "data/transaction_counter.db"
 local balance = 0
 
 local directions = {
@@ -36,20 +37,48 @@ local function save()
     return true
 end
 
+local function readCounter()
+    if not fs.exists(COUNTER_PATH) then return 0 end
+    local handle = fs.open(COUNTER_PATH, "r")
+    if not handle then return 0 end
+    local value = math.max(0, math.floor(tonumber(handle.readAll()) or 0))
+    handle.close()
+    return value
+end
+
+local function nextTransactionId()
+    ensureDataDirectory(COUNTER_PATH)
+    local number = readCounter() + 1
+    local handle = fs.open(COUNTER_PATH, "w")
+    if handle then
+        handle.write(tostring(number))
+        handle.close()
+    end
+    return "CR-" .. string.format("%06d", number)
+end
+
 local function logTransaction(kind, amount, resultingBalance)
     ensureDataDirectory(LOG_PATH)
     local handle = fs.open(LOG_PATH, "a")
-    if not handle then return false end
+    if not handle then return nil end
 
-    local stamp = tostring(os.epoch("utc"))
+    local entry = {
+        id = nextTransactionId(),
+        timestamp = os.epoch("utc"),
+        kind = tostring(kind or "TRANSACTION"),
+        amount = math.floor(tonumber(amount) or 0),
+        balance = math.floor(tonumber(resultingBalance) or balance)
+    }
+
     handle.writeLine(table.concat({
-        stamp,
-        tostring(kind or "TRANSACTION"),
-        tostring(math.floor(tonumber(amount) or 0)),
-        tostring(math.floor(tonumber(resultingBalance) or balance))
+        entry.id,
+        tostring(entry.timestamp),
+        entry.kind,
+        tostring(entry.amount),
+        tostring(entry.balance)
     }, "|"))
     handle.close()
-    return true
+    return entry
 end
 
 function wallet.load()
@@ -98,8 +127,8 @@ function wallet.spend(amount, kind)
         return false, problem
     end
 
-    logTransaction(kind or "SPEND", -amount, balance)
-    return true, balance
+    local transaction = logTransaction(kind or "SPEND", -amount, balance)
+    return true, balance, transaction
 end
 
 function wallet.add(amount, kind)
@@ -118,8 +147,8 @@ function wallet.add(amount, kind)
         return false, problem
     end
 
-    logTransaction(kind or "CREDIT", amount, balance)
-    return true, balance
+    local transaction = logTransaction(kind or "CREDIT", amount, balance)
+    return true, balance, transaction
 end
 
 function wallet.getRecentTransactions(limit)
@@ -133,9 +162,20 @@ function wallet.getRecentTransactions(limit)
     while true do
         local line = handle.readLine()
         if not line then break end
-        local stamp, kind, amount, entryBalance = line:match("([^|]*)|([^|]*)|([^|]*)|([^|]*)")
+
+        local id, stamp, kind, amount, entryBalance =
+            line:match("([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)")
+
+        -- Backward compatibility with receipts created before transaction IDs.
+        if not id then
+            stamp, kind, amount, entryBalance =
+                line:match("([^|]*)|([^|]*)|([^|]*)|([^|]*)")
+            id = "LEGACY"
+        end
+
         if stamp then
             entries[#entries + 1] = {
+                id = id,
                 timestamp = tonumber(stamp) or 0,
                 kind = kind,
                 amount = tonumber(amount) or 0,
@@ -238,13 +278,13 @@ function wallet.depositAll()
         return false, 0, problem
     end
 
-    logTransaction("DEPOSIT", deposited, balance)
+    local transaction = logTransaction("DEPOSIT", deposited, balance)
 
     if deposited < available then
-        return true, deposited, "VAULT FULL"
+        return true, deposited, "VAULT FULL", transaction
     end
 
-    return true, deposited, "DEPOSIT COMPLETE"
+    return true, deposited, "DEPOSIT COMPLETE", transaction
 end
 
 return wallet
