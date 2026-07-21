@@ -1,7 +1,12 @@
 local wallet = {}
 
 local hardware = require("core.hardware")
-local config = require("config")
+
+local currency = "minecraft:diamond"
+local okConfig, loadedConfig = pcall(require, "config")
+if okConfig and type(loadedConfig) == "table" and loadedConfig.currency then
+    currency = loadedConfig.currency
+end
 
 local SAVE_PATH = "data/wallet.db"
 local balance = 0
@@ -59,7 +64,7 @@ local function countCurrency(manager)
 
     local total = 0
     for _, item in pairs(items) do
-        if item and item.name == config.currency then
+        if item and item.name == currency then
             total = total + (tonumber(item.count) or 0)
         end
     end
@@ -71,7 +76,7 @@ local function removeToDirection(manager, direction, amount)
         manager.removeItemFromPlayer,
         direction,
         {
-            name = config.currency,
+            name = currency,
             count = amount
         }
     )
@@ -101,7 +106,6 @@ function wallet.depositAll()
     local deposited = 0
     local remaining = available
 
-    -- Move in stack-sized batches and only credit the amount actually moved.
     while remaining > 0 do
         local batch = math.min(64, remaining)
         local movedThisPass = 0
