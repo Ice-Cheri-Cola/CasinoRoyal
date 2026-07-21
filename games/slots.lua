@@ -22,6 +22,41 @@ local spinning = false
 local celebrationTitle = nil
 local celebrationColor = nil
 
+local active = false
+local attractMode = false
+local animationTimer = nil
+local animationFrame = 1
+local lastActivity = 0
+local idleDelay = 20000
+
+local marqueeTitles = {
+    "< ROYAL SLOTS >",
+    "* ROYAL SLOTS *",
+    "+ ROYAL SLOTS +",
+    "= ROYAL SLOTS ="
+}
+
+local marqueeColors = {
+    colors.purple,
+    colors.magenta,
+    colors.cyan,
+    colors.yellow
+}
+
+local spinColors = {
+    colors.purple,
+    colors.magenta,
+    colors.purple,
+    colors.blue
+}
+
+local attractMessages = {
+    "TOUCH TO PLAY",
+    "CASINO ROYAL",
+    "LUCK FAVORS THE BOLD",
+    "ROYAL SLOTS AWAITS"
+}
+
 local symbols = {
     { text = "CHR", color = colors.red, weight = 30, multiplier = 5 },
     { text = "LEM", color = colors.yellow, weight = 25, multiplier = 6 },
@@ -41,6 +76,10 @@ math.randomseed(os.epoch("utc"))
 math.random()
 math.random()
 math.random()
+
+local function now()
+    return os.epoch("utc")
+end
 
 local function currentBet()
     return betOptions[betIndex]
@@ -80,6 +119,16 @@ local function nextSymbol(symbol)
     return symbols[1]
 end
 
+local function noteActivity()
+    lastActivity = now()
+end
+
+local function scheduleAnimation()
+    if active then
+        animationTimer = os.startTimer(0.55)
+    end
+end
+
 local function drawStatus(y)
     local width = display.size()
     local text = tostring(message or "")
@@ -87,6 +136,36 @@ local function drawStatus(y)
         text = text:sub(1, width - 4)
     end
     display.center(y, text, messageColor)
+end
+
+local function drawAnimatedHeader()
+    local titleIndex = ((animationFrame - 1) % #marqueeTitles) + 1
+    local colorIndex = ((animationFrame - 1) % #marqueeColors) + 1
+
+    gameui.header(marqueeTitles[titleIndex], "LUCK FAVORS THE BOLD")
+    display.center(2, marqueeTitles[titleIndex], marqueeColors[colorIndex])
+end
+
+local function drawAttractMode()
+    ui.clear()
+    display.clear()
+
+    local _, height = display.size()
+    local titleIndex = ((animationFrame - 1) % #marqueeTitles) + 1
+    local colorIndex = ((animationFrame - 1) % #marqueeColors) + 1
+    local messageIndex = (math.floor((animationFrame - 1) / 2) % #attractMessages) + 1
+
+    gameui.header(marqueeTitles[titleIndex], "LIVING CASINO")
+    display.center(2, marqueeTitles[titleIndex], marqueeColors[colorIndex])
+    display.center(5, attractMessages[messageIndex], colors.white)
+    gameui.reels(8, reels, {
+        marqueeColors[colorIndex],
+        marqueeColors[(colorIndex % #marqueeColors) + 1],
+        marqueeColors[((colorIndex + 1) % #marqueeColors) + 1]
+    })
+    display.center(15, "TOUCH ANYWHERE", colors.yellow)
+    display.center(16, "TO BEGIN", colors.yellow)
+    display.center(height - 2, "CASINO ROYAL", colors.lightGray)
 end
 
 local function drawScreen(borderColors)
@@ -100,7 +179,7 @@ local function drawScreen(borderColors)
         gameui.header(celebrationTitle, "CASINO ROYAL")
         display.center(2, celebrationTitle, celebrationColor or colors.yellow)
     else
-        gameui.header("ROYAL SLOTS", "LUCK FAVORS THE BOLD")
+        drawAnimatedHeader()
     end
 
     gameui.labelValue(5, "CREDITS", wallet.getBalance(), colors.yellow)
@@ -115,6 +194,7 @@ local function drawScreen(borderColors)
 
     ui.button("bet_down", "-", leftX, controlsY, betButtonWidth, 1, function()
         if spinning then return end
+        noteActivity()
         betIndex = math.max(1, betIndex - 1)
         message = "BET: " .. currentBet()
         messageColor = colors.white
@@ -123,6 +203,7 @@ local function drawScreen(borderColors)
 
     ui.button("bet_up", "+", rightX, controlsY, betButtonWidth, 1, function()
         if spinning then return end
+        noteActivity()
         betIndex = math.min(#betOptions, betIndex + 1)
         message = "BET: " .. currentBet()
         messageColor = colors.white
@@ -130,6 +211,9 @@ local function drawScreen(borderColors)
     end)
 
     local spinY = 16
+    local pulseIndex = ((animationFrame - 1) % #spinColors) + 1
+    local spinBackground = spinning and colors.gray or spinColors[pulseIndex]
+
     ui.button(
         "spin",
         spinning and "SPINNING" or "SPIN",
@@ -140,6 +224,7 @@ local function drawScreen(borderColors)
         function()
             if spinning then return end
 
+            noteActivity()
             celebrationTitle = nil
             celebrationColor = nil
 
@@ -262,9 +347,10 @@ local function drawScreen(borderColors)
             end
 
             spinning = false
+            noteActivity()
             drawScreen()
         end,
-        colorset.primary,
+        spinBackground,
         colors.white
     )
 
@@ -279,6 +365,8 @@ local function drawScreen(borderColors)
             1,
             function()
                 if not spinning and handlers.back then
+                    active = false
+                    attractMode = false
                     celebrationTitle = nil
                     handlers.back()
                 end
@@ -295,20 +383,68 @@ local function drawScreen(borderColors)
 end
 
 function slots.setBalance()
-    -- Kept for compatibility. The slot screen now reads the wallet directly.
+    -- Kept for compatibility. The slot screen reads the wallet directly.
 end
 
 function slots.setHandlers(newHandlers)
     handlers = newHandlers or {}
 end
 
+function slots.handleEvent(event, p1)
+    if not active then return false end
+
+    if event == "monitor_touch" then
+        noteActivity()
+        if attractMode then
+            attractMode = false
+            speakerNote("pling", 14, 0.8)
+            drawScreen()
+            return true
+        end
+        return false
+    end
+
+    if event == "timer" and p1 == animationTimer then
+        animationFrame = animationFrame % 1000 + 1
+
+        if not spinning then
+            if not attractMode and now() - lastActivity >= idleDelay then
+                attractMode = true
+                celebrationTitle = nil
+                message = "GOOD LUCK!"
+                messageColor = colors.white
+            end
+
+            if attractMode then
+                reels[1] = nextSymbol(reels[1])
+                if animationFrame % 2 == 0 then reels[2] = nextSymbol(reels[2]) end
+                if animationFrame % 3 == 0 then reels[3] = nextSymbol(reels[3]) end
+                if animationFrame % 12 == 0 then speakerNote("bell", 12, 0.35) end
+                drawAttractMode()
+            else
+                drawScreen()
+            end
+        end
+
+        scheduleAnimation()
+        return true
+    end
+
+    return false
+end
+
 function slots.open()
+    active = true
+    attractMode = false
     spinning = false
+    animationFrame = 1
     celebrationTitle = nil
     celebrationColor = nil
     message = "GOOD LUCK!"
     messageColor = colors.white
+    noteActivity()
     drawScreen()
+    scheduleAnimation()
 end
 
 return slots
