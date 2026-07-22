@@ -10,7 +10,7 @@ local display = require("core.display")
 local gameui = require("core.gameui")
 local ui = require("core.ui")
 local theme = require("core.theme")
-local wallet = require("core.wallet")
+local credits = require("core.credits")
 local hardware = require("core.hardware")
 
 local handlers = {}
@@ -182,7 +182,7 @@ local function drawScreen(borderColors)
         drawAnimatedHeader()
     end
 
-    gameui.labelValue(5, "CREDITS", wallet.getBalance(), colors.yellow)
+    gameui.labelValue(5, "CREDITS", credits.get(), colors.yellow)
     gameui.reels(7, reels, borderColors)
 
     display.center(13, "BET: " .. tostring(currentBet()), colors.yellow)
@@ -229,7 +229,7 @@ local function drawScreen(borderColors)
             celebrationColor = nil
 
             local bet = currentBet()
-            local spent, problem = wallet.spend(bet)
+            local spent, problem = credits.remove(bet, "SLOTS WAGER")
             if not spent then
                 message = problem or "WAGER FAILED"
                 messageColor = colors.red
@@ -325,7 +325,7 @@ local function drawScreen(borderColors)
                     sleep(jackpot and 0.09 or 0.06)
                 end
 
-                local paid, payProblem = wallet.add(prize)
+                local paid, payProblem = credits.add(prize, jackpot and "SLOTS JACKPOT" or "SLOTS WIN")
                 if not paid then
                     celebrationTitle = nil
                     message = payProblem or "PAYOUT FAILED"
@@ -383,7 +383,8 @@ local function drawScreen(borderColors)
 end
 
 function slots.setBalance()
-    -- Kept for compatibility. The slot screen reads the wallet directly.
+    -- Kept temporarily for compatibility with casino.lua.
+    -- The slot machine now owns and reads its local credits directly.
 end
 
 function slots.setHandlers(newHandlers)
@@ -434,6 +435,7 @@ function slots.handleEvent(event, p1)
 end
 
 function slots.open()
+    credits.load()
     active = true
     attractMode = false
     spinning = false
